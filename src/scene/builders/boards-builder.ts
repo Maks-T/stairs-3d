@@ -17,9 +17,7 @@ export class BoardsBuilder {
       return boardsGroup;
     }
 
-    const showCladding = viewMode !== 'no-cladding';
-
-    if (showCladding) {
+    if (layout.cladding.length > 0) {
       layout.cladding.forEach((box: BoxElement) => {
         const material = materials.getBoardMaterial(atlasIndex, viewMode, box.width, box.depth);
         const geometry = new THREE.BoxGeometry(box.width, box.height, box.depth);

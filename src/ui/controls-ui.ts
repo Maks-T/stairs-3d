@@ -14,10 +14,12 @@ import {
 import { calculateCladdingEstimate } from '@/core/cladding-calculator';
 import { calculatePipeCutting } from '@/services/cutting-service';
 import { buildStairsEstimate, type FlatEstimateRow } from '@/services/estimate-service';
+import { DrawingsView } from '@/ui/drawings-view';
 
 export class ControlsUI {
   private dockviewApi!: DockviewApi;
   public readonly viewportContainer: HTMLElement;
+  private readonly drawingsView: DrawingsView;
 
   private sliderWidth!: HTMLInputElement;
   private inputWidth!: HTMLInputElement;
@@ -56,6 +58,7 @@ export class ControlsUI {
     this.onChangeCallback = onChange;
     this.viewportContainer = document.createElement('div');
     this.viewportContainer.id = 'cad-viewport-container';
+    this.drawingsView = new DrawingsView();
 
     this.initDockview(rootContainer);
   }
@@ -80,10 +83,21 @@ export class ControlsUI {
     });
 
     this.dockviewApi.addPanel({
+      id: 'panel_drawings',
+      component: 'drawings',
+      title: 'Чертежи',
+      position: { referencePanel: 'panel_viewport', direction: 'within' }
+    });
+
+    const rootWidth = rootContainer.clientWidth || window.innerWidth;
+    const sidebarWidth = Math.max(320, Math.round(rootWidth * 0.3));
+
+    const paramsPanel = this.dockviewApi.addPanel({
       id: 'panel_params',
       component: 'params',
       title: 'Параметры конструкции',
-      position: { referencePanel: 'panel_viewport', direction: 'right' }
+      position: { referencePanel: 'panel_viewport', direction: 'right' },
+      initialWidth: sidebarWidth
     });
 
     this.dockviewApi.addPanel({
@@ -96,14 +110,14 @@ export class ControlsUI {
     this.dockviewApi.addPanel({
       id: 'panel_estimate',
       component: 'estimate',
-      title: 'Смета (Estimate)',
+      title: 'Смета',
       position: { referencePanel: 'panel_params', direction: 'below' }
     });
 
     this.dockviewApi.addPanel({
       id: 'panel_cutting',
       component: 'cutting',
-      title: 'Раскрой (LinearCutter)',
+      title: 'Раскрой',
       position: { referencePanel: 'panel_estimate', direction: 'within' }
     });
 
@@ -113,11 +127,19 @@ export class ControlsUI {
       title: 'Спецификация',
       position: { referencePanel: 'panel_estimate', direction: 'within' }
     });
+
+    const applySidebarSize = () => {
+      const currentWidth = rootContainer.clientWidth || window.innerWidth;
+      paramsPanel.api.setSize({ width: Math.max(320, Math.round(currentWidth * 0.3)) });
+    };
+    applySidebarSize();
+    requestAnimationFrame(applySidebarSize);
   }
 
   private createPanelContent(componentName: string): HTMLElement {
     switch (componentName) {
       case 'viewport': return this.viewportContainer;
+      case 'drawings': return this.drawingsView.container;
       case 'params': return this.createParamsView();
       case 'materials': return this.createMaterialsView();
       case 'specification': return this.createSpecificationView();
@@ -354,6 +376,8 @@ export class ControlsUI {
     const pipeCutting = calculatePipeCutting(layout);
     const estimate = buildStairsEstimate(layout, pipeCutting, claddingEst);
 
+    this.drawingsView.update(layout);
+
     if (this.badgeStepInfo) {
       this.badgeStepInfo.textContent = `${layout.stepCount} ступ. (~${Math.round(layout.stepHeight)} мм)`;
     }
@@ -399,13 +423,13 @@ export class ControlsUI {
             const segmentsHtml = bar.parts
               .map((p) => {
                 const pct = (p.length / bar.stockLength) * 100;
-                return `<div class="cut-segment" style="width: ${pct}%;" title="${p.name}">${p.length}</div>`;
+                return `<div class="cut-segment" style="width: ${pct}%; flex-basis: ${pct}%;" title="${p.name}">${p.length}</div>`;
               })
               .join('');
 
             const wastePct = (bar.remainLength / bar.stockLength) * 100;
             const wasteHtml = bar.remainLength > 0
-              ? `<div class="cut-segment waste" style="width: ${wastePct}%;" title="Остаток: ${bar.remainLength} мм">${bar.remainLength}</div>`
+              ? `<div class="cut-segment waste" style="width: ${wastePct}%; flex-basis: ${wastePct}%;" title="Остаток: ${bar.remainLength} мм">${bar.remainLength}</div>`
               : '';
 
             return `

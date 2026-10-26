@@ -52,13 +52,13 @@ function generateRiserElements(
 ): BoxElement[] {
   const risers: BoxElement[] = [];
   const riserHeight = calculateVisibleRiserHeight(stepHeight, STEP_TREAD_THICKNESS_MM);
-  const actualHeight = Math.max(0, riserHeight - RISER_TOP_CLEARANCE_MM - DRAINAGE_GAP_MM);
+  const actualHeight = Math.max(0, riserHeight - RISER_TOP_CLEARANCE_MM);
 
   for (let i = 0; i < stepCount; i++) {
     const tierIndexFromTop = (stepCount - 1) - i;
     const zFrontTier = (tierIndexFromTop + 1) * metrics.tierStepRunMm;
     const zCenter = zFrontTier + (RISER_THICKNESS_MM / 2);
-    const yBottom = (i * stepHeight) + DRAINAGE_GAP_MM;
+    const yBottom = i * stepHeight;
     const yCenter = yBottom + (actualHeight / 2);
 
     risers.push({

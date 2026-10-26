@@ -8,7 +8,7 @@ export const RISER_STOCK_HEIGHT_MM = 145;
 
 export const RISER_TOP_CLEARANCE_MM = 3;
 export const NOSE_INNER_GAP_MM = 3;
-export const DRAINAGE_GAP_MM = 3;
+export const DRAINAGE_GAP_MM = 0;
 
 export const PROFILE_TUBE_SIZE_MM = 40;
 export const PROFILE_WALL_THICKNESS_MM = 2;

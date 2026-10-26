@@ -1,7 +1,7 @@
-import { Estimate, EstimateItem } from 'estimate';
-import type { StairLayoutResult } from '../types/stairs';
-import type { CuttingOptimizationResult } from './cutting-service';
-import type { CladdingEstimate } from '../core/cladding-calculator';
+import { Estimate } from 'estimate';
+import type { StairLayoutResult } from '@/types/stairs';
+import type { CuttingOptimizationResult } from '@/services/cutting-service';
+import type { CladdingEstimate } from '@/core/cladding-calculator';
 
 export interface FlatEstimateRow {
   id: string;
