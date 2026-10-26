@@ -1,0 +1,12 @@
+[submodule "packages/linear-cutter"]
+	path = packages/linear-cutter
+	url = https://github.com/kapitulin24/linear_cutter
+[submodule "packages/reverse-cutter"]
+	path = packages/reverse-cutter
+	url = https://github.com/kapitulin24/reverseCutter
+[submodule "packages/math-pack"]
+	path = packages/math-pack
+	url = https://github.com/kapitulin24/math-pack
+[submodule "packages/estimate"]
+	path = packages/estimate
+	url = https://github.com/kapitulin24/Estimate
