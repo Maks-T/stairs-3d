@@ -1,4 +1,4 @@
-export type ViewMode = 'solid' | 'xray' | 'frame' | 'no-cladding';
+export type ViewMode = 'solid' | 'xray' | 'frame';
 
 export type BackgroundType = 'white' | 'park' | 'sky' | 'no';
 
@@ -6,6 +6,8 @@ export interface StairUserParams {
   width: number;
   height: number;
   viewMode: ViewMode;
+  hasRisers: boolean;
+  hasSideCladding: boolean;
   atlasIndex: number;
   background: BackgroundType;
 }

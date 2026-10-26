@@ -1,0 +1,31 @@
+{
+  "repoUrl": "https://github.com/kapitulin24/oliver-deck.git",
+  "branch": "deploy/build",
+  "autoDeployWebhook": false,
+  "servers": [
+    {
+      "name": "OliverDeck (oliverdeck.vistegra-admin.ru)",
+      "enabled": false,
+      "webhookUrl": "https://oliverdeck.vistegra-admin.ru/api/v1/webhooks/calculator/deploy",
+      "secret": "eyJ0eXAiOiJWUlQiLCJhbGciOiJIUzUxMiJ9"
+    },
+    {
+      "name": "WPC (wpc.vistegra-admin.ru)",
+      "enabled": false,
+      "webhookUrl": "https://wpc.vistegra-admin.ru/api/v1/webhooks/calculator/deploy",
+      "secret": "eyJ0eXAiOiJWUlQiLCJhbGciOiJIUzUxMiJ9"
+    },
+    {
+      "name": "Polivan (polivan.vistegra-admin.ru)",
+      "enabled": false,
+      "webhookUrl": "https://polivan.vistegra-admin.ru/api/v1/webhooks/calculator/deploy",
+      "secret": "eyJ0eXAiOiJWUlQiLCJhbGciOiJIUzUxMiJ9"
+    },
+    {
+      "name": "GreenDecks (greendecks.vistegra-admin.ru)",
+      "enabled": false,
+      "webhookUrl": "https://greendecks.vistegra-admin.ru/api/v1/webhooks/calculator/deploy",
+      "secret": "eyJ0eXAiOiJWUlQiLCJhbGciOiJIUzUxMiJ9"
+    }
+  ]
+}

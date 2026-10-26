@@ -2,11 +2,6 @@ import * as THREE from 'three';
 import type { BoxElement, StairLayoutResult } from '../../types/stairs';
 import type { MaterialsManager } from '../materials-manager';
 
-/**
- * Модульный строитель 3D-металлокаркаса.
- * Создает меши для всех элементов замкнутой пространственной рамы,
- * рассчитанных в ядре layout-calculator.
- */
 export class FrameBuilder {
   static build(layout: StairLayoutResult, materials: MaterialsManager): THREE.Group {
     const frameGroup = new THREE.Group();

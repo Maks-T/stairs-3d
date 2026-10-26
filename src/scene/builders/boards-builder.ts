@@ -2,10 +2,6 @@ import * as THREE from 'three';
 import type { BoxElement, StairLayoutResult, ViewMode } from '../../types/stairs';
 import type { MaterialsManager } from '../materials-manager';
 
-/**
- * Модульный строитель досок ступеней и подступенков.
- * Управляет режимами отображения (сплошной настил, рентген, полное скрытие).
- */
 export class BoardsBuilder {
   static build(
     layout: StairLayoutResult,
@@ -23,7 +19,6 @@ export class BoardsBuilder {
 
     const showCladding = viewMode !== 'no-cladding';
 
-    // Боковая и задняя зашивка (обшивка)
     if (showCladding) {
       layout.cladding.forEach((box: BoxElement) => {
         const material = materials.getBoardMaterial(atlasIndex, viewMode, box.width, box.depth);
@@ -36,7 +31,6 @@ export class BoardsBuilder {
       });
     }
 
-    // Ступени (проступи ДПК CM 305)
     layout.treads.forEach((box: BoxElement) => {
       const material = materials.getBoardMaterial(atlasIndex, viewMode, box.width, box.depth);
       const geometry = new THREE.BoxGeometry(box.width, box.height, box.depth);
@@ -46,7 +40,6 @@ export class BoardsBuilder {
       mesh.receiveShadow = viewMode === 'solid';
       mesh.name = box.id;
 
-      // Носик капиноса (свес 20 мм вниз на передней кромке)
       const noseLipHeight = 15;
       const noseLipDepth = 6;
       const noseGeom = new THREE.BoxGeometry(box.width, noseLipHeight, noseLipDepth);
@@ -57,7 +50,6 @@ export class BoardsBuilder {
       boardsGroup.add(mesh);
     });
 
-    // Вертикальные подступенки (заборная доска МПК 11 мм)
     layout.risers.forEach((box: BoxElement) => {
       const material = materials.getBoardMaterial(atlasIndex, viewMode, box.width, box.height);
       const geometry = new THREE.BoxGeometry(box.width, box.height, box.depth);

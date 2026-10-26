@@ -1,6 +1,7 @@
 export const STEP_TREAD_DEPTH_MM = 305;
 export const STEP_TREAD_THICKNESS_MM = 25;
 export const STEP_NOSE_OVERHANG_MM = 20;
+export const REAR_OVERHANG_MM = 0;
 
 export const RISER_THICKNESS_MM = 11;
 export const RISER_STOCK_HEIGHT_MM = 145;
@@ -21,8 +22,6 @@ export const MIN_STAIR_WIDTH_MM = 800;
 export const MAX_STAIR_WIDTH_MM = 3000;
 export const MIN_STAIR_HEIGHT_MM = 150;
 export const MAX_STAIR_HEIGHT_MM = 1500;
-
-export const CLADDING_OVERHANG_MM = 10; // Свис боковой зашивки за габарит каркаса
 
 export const ATLAS_TEXTURE_PATH = './textures/wood_atlas.jpg';
 

@@ -11,19 +11,20 @@ export class SceneManager {
   private readonly scene: THREE.Scene;
   private readonly controls: OrbitControls;
   private readonly materials: MaterialsManager;
+  private readonly container: HTMLElement;
 
   private frameGroup: THREE.Group | null = null;
   private boardsGroup: THREE.Group | null = null;
 
   constructor(container: HTMLElement, onMaterialsReady?: () => void) {
+    this.container = container;
     this.scene = new THREE.Scene();
 
-    this.camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 10, 30000);
+    this.camera = new THREE.PerspectiveCamera(45, 1, 10, 30000);
     this.camera.position.set(1600, 1200, 2400);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.setSize(container.clientWidth, container.clientHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -39,8 +40,8 @@ export class SceneManager {
     this.setBackground('white');
 
     this.materials = new MaterialsManager(onMaterialsReady);
+    this.handleResize();
 
-    window.addEventListener('resize', () => this.handleResize(container));
     this.startAnimationLoop();
   }
 
@@ -99,9 +100,11 @@ export class SceneManager {
     this.controls.target.set(0, layout.totalHeight / 2, layout.totalDepth / 2);
   }
 
-  private handleResize(container: HTMLElement): void {
-    const width = container.clientWidth;
-    const height = container.clientHeight;
+  public handleResize(): void {
+    const width = this.container.clientWidth;
+    const height = this.container.clientHeight;
+    if (width === 0 || height === 0) return;
+
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height);

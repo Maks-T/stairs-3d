@@ -1,9 +1,5 @@
 import type { TransverseSpacing } from '../types/stairs';
 
-/**
- * Расчет целочисленных пролетов стоек каркаса в свету с зеркальной симметрией.
- * Исключает дробные миллиметры и гарантирует центровку оси лестницы.
- */
 export function calculateTransverseSpacing(
   frameWidthMm: number,
   postSizeMm: number,

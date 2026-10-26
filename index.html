@@ -3,80 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Конфигуратор лестницы 3D | Oliver Deck</title>
+  <title>Конфигуратор лестницы 3D | Oliver Deck CAD</title>
   <link rel="stylesheet" href="./src/style.css">
 </head>
-<body>
-  <div id="app">
-    <div id="canvas-container"></div>
-
-    <aside id="ui-panel">
-      <h2>Параметры лестницы</h2>
-
-      <div class="control-group">
-        <label for="input-width">Ширина марша (W), мм</label>
-        <div class="input-row">
-          <input type="range" id="slider-width" min="800" max="3000" step="50" value="1500">
-          <input type="number" id="input-width" min="800" max="3000" step="10" value="1500">
-        </div>
-      </div>
-
-      <div class="control-group">
-        <label for="input-height">Высота крыльца (H), мм</label>
-        <div class="input-row">
-          <input type="range" id="slider-height" min="150" max="1500" step="150" value="300">
-          <input type="number" id="input-height" min="150" max="1500" step="10" value="300">
-        </div>
-        <div id="step-calc-info" class="calc-badge">2 ступени (~150 мм)</div>
-      </div>
-
-      <div class="control-group">
-        <label>Режим отображения досок</label>
-        <div class="btn-group" id="view-mode-group">
-          <button type="button" class="btn active" data-mode="solid">Настил</button>
-          <button type="button" class="btn" data-mode="xray">Рентген (X-Ray)</button>
-          <button type="button" class="btn" data-mode="no-cladding">Без обшивки</button>
-          <button type="button" class="btn" data-mode="frame">Только каркас</button>
-        </div>
-      </div>
-
-      <div class="control-group">
-        <label>Окружение / Фон</label>
-        <select id="select-bg" class="select-field">
-          <option value="white">Белый</option>
-          <option value="park">Парк (куб)</option>
-          <option value="sky">Небо (куб)</option>
-          <option value="no">Без фона</option>
-        </select>
-      </div>
-
-      <div class="control-group">
-        <label>Текстура настила (Атлас)</label>
-        <select id="select-texture" class="select-field">
-          <option value="0">Honey Teak</option>
-          <option value="1">Dark Chocolate</option>
-          <option value="2">Light Oak</option>
-          <option value="3">Classic Teak</option>
-          <option value="5">Charcoal</option>
-          <option value="6">Silver Gray</option>
-          <option value="7">Graphite Velvet</option>
-          <option value="9">Walnut</option>
-        </select>
-      </div>
-
-      <div class="spec-panel">
-        <h3>Спецификация конструкции</h3>
-        <ul id="spec-list">
-          <li>Ступени: ДПК CM 305 (25×305 мм)</li>
-          <li>Подступенки: МПК (11×145 мм)</li>
-          <li>Каркас: Профильная труба 40×40×2 мм</li>
-          <li>Стойки в свету: <span id="spec-spans">-</span></li>
-          <li>Общий метраж трубы: <span id="spec-pipe">-</span> м</li>
-        </ul>
-      </div>
-    </aside>
-  </div>
-
-  <script type="module" src="./src/main.ts"></script>
+<body class="dockview-theme-light">
+<div id="dockview-root"></div>
+<script type="module" src="./src/main.ts"></script>
 </body>
 </html>
