@@ -9,7 +9,6 @@ import {
   MAX_STAIR_WIDTH_MM,
   MIN_STAIR_HEIGHT_MM,
   MAX_STAIR_HEIGHT_MM,
-  STAIRS_NORMS,
   ATLAS_UV_MAP
 } from '@/constants/stairs-config';
 import { calculateCladdingEstimate } from '@/core/cladding-calculator';

@@ -2,7 +2,6 @@
 import LinearCutter from 'linear-cutter';
 import type { BoxElement, StairLayoutResult } from '@/types/stairs';
 import { STEP_FRAME_CLEAR_SPAN_MM } from '@/constants/stairs-config';
-import { PROFILE_TUBE_SIZE_MM } from '@/constants/stairs-config';
 
 const STOCK_PIPE_LENGTH_MM = 6000;
 const SAW_KERF_MM = 3;

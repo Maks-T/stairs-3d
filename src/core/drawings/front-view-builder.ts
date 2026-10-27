@@ -2,8 +2,7 @@ import type { StairLayoutResult } from '@/types/stairs';
 import {
   PROFILE_TUBE_SIZE_MM,
   STEP_TREAD_THICKNESS_MM,
-  RISER_THICKNESS_MM,
-  RISER_TOP_CLEARANCE_MM
+  RISER_THICKNESS_MM
 } from '@/constants/stairs-config';
 import {
   createSvgDefs,
