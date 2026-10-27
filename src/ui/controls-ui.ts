@@ -29,6 +29,7 @@ export class ControlsUI {
   private badgeStepInfo!: HTMLElement;
   private checkRisers!: HTMLInputElement;
   private checkCladding!: HTMLInputElement;
+  private checkFasteners!: HTMLInputElement;
 
   private selectBg!: HTMLSelectElement;
   private selectTexture!: HTMLSelectElement;
@@ -50,6 +51,7 @@ export class ControlsUI {
     viewMode: 'solid',
     hasRisers: true,
     hasSideCladding: true,
+    showFasteners: false,
     atlasIndex: 0,
     background: 'white'
   };
@@ -78,7 +80,7 @@ export class ControlsUI {
       }
     });
 
-    this.dockviewApi.addPanel({
+    const viewportPanel = this.dockviewApi.addPanel({
       id: 'panel_viewport',
       component: 'viewport',
       title: '3D Модель'
@@ -90,6 +92,8 @@ export class ControlsUI {
       title: 'Чертежи',
       position: { referencePanel: 'panel_viewport', direction: 'within' }
     });
+
+    viewportPanel.api.setActive();
 
     const rootWidth = rootContainer.clientWidth || window.innerWidth;
     const sidebarWidth = Math.max(320, Math.round(rootWidth * 0.3));
@@ -182,6 +186,10 @@ export class ControlsUI {
           <label for="check-cladding">Боковая зашивка (доска 145 мм)</label>
           <input type="checkbox" id="check-cladding" checked>
         </div>
+        <div class="cad-toggle-row">
+          <label for="check-fasteners">Точки крепления</label>
+          <input type="checkbox" id="check-fasteners">
+        </div>
       </div>
     `;
 
@@ -192,6 +200,7 @@ export class ControlsUI {
     this.badgeStepInfo = el.querySelector('#p-badge-step-info') as HTMLElement;
     this.checkRisers = el.querySelector('#check-risers') as HTMLInputElement;
     this.checkCladding = el.querySelector('#check-cladding') as HTMLInputElement;
+    this.checkFasteners = el.querySelector('#check-fasteners') as HTMLInputElement;
 
     this.bindDimensionPair(this.sliderWidth, this.inputWidth, MIN_STAIR_WIDTH_MM, MAX_STAIR_WIDTH_MM, (val) => {
       this.params.width = val;
@@ -210,6 +219,11 @@ export class ControlsUI {
 
     this.checkCladding.addEventListener('change', () => {
       this.params.hasSideCladding = this.checkCladding.checked;
+      this.onChangeCallback(this.params);
+    });
+
+    this.checkFasteners.addEventListener('change', () => {
+      this.params.showFasteners = this.checkFasteners.checked;
       this.onChangeCallback(this.params);
     });
 

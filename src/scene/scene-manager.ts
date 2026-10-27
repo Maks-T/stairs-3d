@@ -4,6 +4,7 @@ import type { BackgroundType, StairLayoutResult, ViewMode } from '../types/stair
 import { MaterialsManager } from './materials-manager';
 import { FrameBuilder } from './builders/frame-builder';
 import { BoardsBuilder } from './builders/boards-builder';
+import { FastenersBuilder } from './builders/fasteners-builder';
 
 export class SceneManager {
   private readonly renderer: THREE.WebGLRenderer;
@@ -15,6 +16,7 @@ export class SceneManager {
 
   private frameGroup: THREE.Group | null = null;
   private boardsGroup: THREE.Group | null = null;
+  private fastenersGroup: THREE.Group | null = null;
 
   constructor(container: HTMLElement, onMaterialsReady?: () => void) {
     this.container = container;
@@ -77,7 +79,7 @@ export class SceneManager {
     }
   }
 
-  renderStairs(layout: StairLayoutResult, viewMode: ViewMode, atlasIndex: number): void {
+  renderStairs(layout: StairLayoutResult, viewMode: ViewMode, atlasIndex: number, showFasteners: boolean): void {
     if (this.frameGroup) {
       this.scene.remove(this.frameGroup);
       this.frameGroup.traverse((obj) => {
@@ -90,12 +92,20 @@ export class SceneManager {
         if (obj instanceof THREE.Mesh) obj.geometry.dispose();
       });
     }
+    if (this.fastenersGroup) {
+      this.scene.remove(this.fastenersGroup);
+      this.fastenersGroup.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) obj.geometry.dispose();
+      });
+    }
 
     this.frameGroup = FrameBuilder.build(layout, this.materials);
     this.boardsGroup = BoardsBuilder.build(layout, this.materials, viewMode, atlasIndex);
+    this.fastenersGroup = FastenersBuilder.build(layout.fastenerPoints, showFasteners);
 
     this.scene.add(this.frameGroup);
     this.scene.add(this.boardsGroup);
+    this.scene.add(this.fastenersGroup);
 
     this.controls.target.set(0, layout.totalHeight / 2, layout.totalDepth / 2);
   }

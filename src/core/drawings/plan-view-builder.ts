@@ -50,18 +50,6 @@ export function generatePlanViewSvg(layout: StairLayoutResult): string {
     rowYList.push(originY + (r * STEP_FRAME_MODULE_DEPTH_MM) - PROFILE_TUBE_SIZE_MM);
   }
 
-  // Продольные перемычки между рядами стоек (191 мм в свету)
-  for (let r = 0; r < rowYList.length - 1; r++) {
-    const yStart = (rowYList[r] ?? originY) + PROFILE_TUBE_SIZE_MM;
-    const yEnd = rowYList[r + 1] ?? yStart;
-    const spanH = Math.max(0, yEnd - yStart);
-
-    spacing.postXOffsets.forEach((xOff: number) => {
-      const postX = frameOriginX + xOff;
-      svgParts.push(renderRect(postX, yStart, PROFILE_TUBE_SIZE_MM, spanH, '#f8fafc', '#94a3b8', 1.0));
-    });
-  }
-
   // Отрисовка стоек 40х40 в узлах сетки
   rowYList.forEach((rY: number) => {
     spacing.postXOffsets.forEach((xOff: number) => {

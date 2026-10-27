@@ -2,12 +2,27 @@ export type ViewMode = 'solid' | 'xray' | 'frame';
 
 export type BackgroundType = 'white' | 'park' | 'sky' | 'no';
 
+export type FastenerPointType = 'tread' | 'riser' | 'cladding';
+
+export interface FastenerPoint {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  normalX: number;
+  normalY: number;
+  normalZ: number;
+  type: FastenerPointType;
+  spec: string;
+}
+
 export interface StairUserParams {
   width: number;
   height: number;
   viewMode: ViewMode;
   hasRisers: boolean;
   hasSideCladding: boolean;
+  showFasteners: boolean;
   atlasIndex: number;
   background: BackgroundType;
 }
@@ -78,5 +93,6 @@ export interface StairLayoutResult {
   spacing: TransverseSpacing;
   metrics: StepNodeMetrics;
   fasteners: FastenersCalculationResult;
+  fastenerPoints: FastenerPoint[];
   totalPipeLengthM: number;
 }

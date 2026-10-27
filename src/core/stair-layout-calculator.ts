@@ -8,17 +8,17 @@ import {
   RISER_TOP_CLEARANCE_MM,
   STEP_FRAME_MODULE_DEPTH_MM,
   STEP_FRAME_CLEAR_SPAN_MM
-} from '../constants/stairs-config';
+} from '@/constants/stairs-config';
 import type {
   BoxElement,
   StairLayoutResult,
   StepNodeMetrics,
   TransverseSpacing
-} from '../types/stairs';
+} from '@/types/stairs';
 import { calculateStepNodeMetrics, calculateVisibleRiserHeight } from './nodes/step-node-calculator';
 import { calculateTransverseSpacing } from './spacing-calculator';
 import { calculateSideCladdingPieces } from './cladding-calculator';
-import { calculateFasteners } from './fasteners-calculator';
+import { calculateFasteners, calculateFastenerPoints } from './fasteners-calculator';
 
 function generateTreadElements(
   stepCount: number,
@@ -83,7 +83,7 @@ function generateCladdingElements(
 ): BoxElement[] {
   const cladding: BoxElement[] = [];
   const sideX = (totalWidth / 2) - (RISER_THICKNESS_MM / 2);
-  const sidePieces = calculateSideCladdingPieces(stepCount);
+  const sidePieces = calculateSideCladdingPieces(stepCount, stepHeight);
 
   let currentY = 0;
   sidePieces.forEach((piece) => {
@@ -232,7 +232,7 @@ export function calculateStairLayout(
     metrics
   );
 
-  const sidePieces = calculateSideCladdingPieces(stepCount);
+  const sidePieces = calculateSideCladdingPieces(stepCount, stepHeight);
   const fasteners = calculateFasteners(
     stepCount,
     spacing.numPosts,
@@ -240,6 +240,16 @@ export function calculateStairLayout(
     hasSideCladding,
     sidePieces
   );
+  const fastenerPoints = calculateFastenerPoints({
+    stepCount,
+    stepHeight,
+    totalWidth: widthMm,
+    spacing,
+    metrics,
+    hasRisers,
+    hasSideCladding,
+    sidePieces
+  });
 
   return {
     stepCount,
@@ -255,6 +265,7 @@ export function calculateStairLayout(
     spacing,
     metrics,
     fasteners,
+    fastenerPoints,
     totalPipeLengthM: Number((totalLengthMm / 1000).toFixed(2))
   };
 }

@@ -16,6 +16,7 @@ function initStairsApp(): void {
     viewMode: 'solid',
     hasRisers: true,
     hasSideCladding: true,
+    showFasteners: false,
     atlasIndex: 0,
     background: 'white'
   };
@@ -41,7 +42,7 @@ function initStairsApp(): void {
     });
 
     sceneManager.setBackground(params.background);
-    sceneManager.renderStairs(layout, params.viewMode, params.atlasIndex);
+    sceneManager.renderStairs(layout, params.viewMode, params.atlasIndex, params.showFasteners);
 
     if (controls) {
       controls.updateAll(layout);

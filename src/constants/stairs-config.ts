@@ -65,6 +65,21 @@ export const FASTENERS_CONFIG = {
   CLADDING_DRILL_BIT_MM: 3.5
 } as const;
 
+export const FASTENERS_GEOMETRY_CONFIG = {
+  TREAD_SHAFT_LENGTH_MM: 50,
+  TREAD_SHAFT_RADIUS_MM: 2.4,
+  TREAD_HEAD_RADIUS_MM: 4.8,
+  TREAD_HEAD_HEIGHT_MM: 1.6,
+  CLADDING_SHAFT_LENGTH_MM: 32,
+  CLADDING_SHAFT_RADIUS_MM: 2.1,
+  CLADDING_HEAD_RADIUS_MM: 4.2,
+  CLADDING_HEAD_HEIGHT_MM: 1.4,
+  TIP_LENGTH_MM: 3.5,
+  COLOR: 0xe11d48,
+  METALNESS: 0.85,
+  ROUGHNESS: 0.25
+} as const;
+
 export const ATLAS_TEXTURE_PATH = './textures/wood_atlas.jpg';
 
 export const ATLAS_UV_MAP: Record<number, { name: string; uv: [number, number, number, number] }> = {
