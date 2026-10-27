@@ -9,6 +9,7 @@ import {
   createSvgDefs,
   createSvgHeader,
   renderDimensionLine,
+  renderLevelAxis,
   renderLevelMark,
   renderLine,
   renderRect,
@@ -26,7 +27,7 @@ export function generateFrontViewSvg(layout: StairLayoutResult): string {
   const svgParts: string[] = [
     createSvgHeader(width, height, `0 0 ${width} ${height}`),
     createSvgDefs(),
-    renderTitle(margin.left, 35, 'Разрез А-А')
+    renderTitle(margin.left + totalWidth / 2, 35, 'Разрез А-А', 'middle')
   ];
 
   const treadOriginX = margin.left;
@@ -127,18 +128,15 @@ export function generateFrontViewSvg(layout: StairLayoutResult): string {
     );
   }
 
-  // Высотные отметки справа
+  // Высотные отметки справа: линия уровня от торца настила к общей оси
+  const levelAxisX = treadOriginX + totalWidth + 45;
+  const levelSymbolX = levelAxisX + 25;
+  svgParts.push(renderLevelAxis(levelAxisX, baseY, stepCount, stepHeight));
   for (let i = 0; i <= stepCount; i++) {
     const lvlY = baseY - (i * stepHeight);
     const valStr = i === 0 ? '0.000' : `+${Math.round(i * stepHeight)}`;
     svgParts.push(
-      renderLevelMark(
-        treadOriginX + totalWidth + 5,
-        lvlY,
-        `Уровень ${i}`,
-        valStr,
-        treadOriginX + totalWidth + 25
-      )
+      renderLevelMark(treadOriginX + totalWidth + 5, lvlY, `Уровень ${i}`, valStr, levelSymbolX)
     );
   }
 

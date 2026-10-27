@@ -11,6 +11,7 @@ import {
   createSvgDefs,
   createSvgHeader,
   renderDimensionLine,
+  renderLevelAxis,
   renderLevelMark,
   renderLine,
   renderNodeCircle,
@@ -22,14 +23,14 @@ import {
 export function generateSideViewSvg(layout: StairLayoutResult): string {
   const { stepCount, stepHeight, totalDepth, totalHeight, metrics, risers } = layout;
 
-  const margin = { top: 95, right: 155, bottom: 120, left: 110 };
+  const margin = { top: 110, right: 155, bottom: 120, left: 160 };
   const width = totalDepth + margin.left + margin.right;
   const height = totalHeight + margin.top + margin.bottom;
 
   const svgParts: string[] = [
     createSvgHeader(width, height, `0 0 ${width} ${height}`),
     createSvgDefs(),
-    renderTitle(margin.left, 28, 'Вид сбоку')
+    renderTitle(margin.left + totalDepth / 2, 28, 'Вид сбоку', 'middle')
   ];
 
   const originX = margin.left;
@@ -104,10 +105,17 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
     }
   }
 
+  // Высотные отметки: линия уровня идёт от кромки проступи к общей оси справа
+  const levelAxisX = originX + totalDepth + 45;
+  const levelSymbolX = levelAxisX + 25;
+  svgParts.push(renderLevelAxis(levelAxisX, baseY, stepCount, stepHeight));
   for (let i = 0; i <= stepCount; i++) {
     const lvlY = baseY - (i * stepHeight);
     const valStr = i === 0 ? '0.000' : `+${Math.round(i * stepHeight)}`;
-    svgParts.push(renderLevelMark(originX + totalDepth + 5, lvlY, `Уровень ${i}`, valStr, originX + totalDepth + 25));
+    const lineStartX = i === 0
+      ? originX + totalDepth + 5
+      : originX + ((stepCount - i) * metrics.tierStepRunMm) + STEP_TREAD_DEPTH_MM + 4;
+    svgParts.push(renderLevelMark(lineStartX, lvlY, `Уровень ${i}`, valStr, levelSymbolX));
   }
 
   svgParts.push(
@@ -209,14 +217,24 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
     })
   );
 
-  svgParts.push(renderSectionCutMark(originX + 15, topTreadY - 20, originX + 15, topTreadY - 4, 'А', 'right'));
-  svgParts.push(renderSectionCutMark(originX + 15, baseY + 8, originX + 15, baseY + 24, 'А', 'right'));
+  // Разрез А-А: вертикальная секущая плоскость по левому торцу, взгляд слева направо
+  svgParts.push(renderSectionCutMark({ x: originX, y: topTreadY - 45, dir: 'right', label: 'А', barSide: -1 }));
+  svgParts.push(renderSectionCutMark({ x: originX, y: baseY + 28, dir: 'right', label: 'А', barSide: 1 }));
 
-  const topTierFrontX = originX + metrics.tierStepRunMm;
-  svgParts.push(renderSectionCutMark(topTierFrontX + 15, topTreadY + PROFILE_TUBE_SIZE_MM + 6, topTierFrontX + 35, topTreadY + PROFILE_TUBE_SIZE_MM + 6, 'Д', 'down'));
-  svgParts.push(renderSectionCutMark(originX + totalDepth - 20, baseY - stepHeight + PROFILE_TUBE_SIZE_MM + 6, originX + totalDepth, baseY - stepHeight + PROFILE_TUBE_SIZE_MM + 6, 'В', 'down'));
-  svgParts.push(renderSectionCutMark(originX - 25, baseY - 35, originX - 5, baseY - 35, 'Б', 'down'));
-  svgParts.push(renderSectionCutMark(originX + totalDepth + 5, baseY - 35, originX + totalDepth + 25, baseY - 35, 'Б', 'down'));
+  // Горизонтальные сечения (взгляд сверху вниз). Марки выносятся за контур с обеих сторон.
+  const beamMidY = (level: number): number =>
+    baseY - (level * stepHeight) + STEP_TREAD_THICKNESS_MM + PROFILE_TUBE_SIZE_MM / 2;
+  const leftCutX = originX - 105;
+  const rightCutX = originX + totalDepth + 12;
+  const planCuts: Array<{ label: string; y: number }> = [
+    { label: 'Д', y: beamMidY(stepCount) },      // верхняя балка каркаса
+    ...(stepCount >= 2 ? [{ label: 'В', y: beamMidY(stepCount - 1) }] : []), // балка второго яруса
+    { label: 'Б', y: baseY - 30 }                // стойки у основания
+  ];
+  planCuts.forEach(({ label, y }) => {
+    svgParts.push(renderSectionCutMark({ x: leftCutX, y, dir: 'down', label, barSide: -1 }));
+    svgParts.push(renderSectionCutMark({ x: rightCutX, y, dir: 'down', label, barSide: 1 }));
+  });
 
   svgParts.push(renderNodeCircle(originX + STEP_TREAD_DEPTH_MM - 10, topTreadY + 12, 18, '1'));
   svgParts.push(renderNodeCircle(originX + 10, topTreadY + 12, 16, '2'));

@@ -81,48 +81,98 @@ export function renderDimensionLine(opts: DimensionLineOptions): string {
   `;
 }
 
-export function renderLevelMark(x: number, y: number, label: string, elevationVal: string, endX: number): string {
-  const x0 = endX + 8;
+/**
+ * Высотная отметка: штрихпунктирная линия уровня доходит до острия треугольника,
+ * полка с отметкой (+450) над ней, название уровня под ней.
+ * x       — начало линии уровня (кромка проступи)
+ * symbolX — x острия треугольника (одинаков для всех уровней)
+ */
+export function renderLevelMark(x: number, y: number, label: string, elevationVal: string, symbolX: number): string {
   return `
     <g class="level-mark">
-      <line x1="${x}" y1="${y}" x2="${endX}" y2="${y}" stroke="#0284c7" stroke-width="0.8" stroke-dasharray="5 3" />
-      <polygon points="${x0 - 5},${y - 7} ${x0 + 5},${y - 7} ${x0},${y}" fill="#0284c7" />
-      <line x1="${x0 - 5}" y1="${y - 7}" x2="${x0 + 58}" y2="${y - 7}" stroke="#0284c7" stroke-width="1.2" />
-      <text x="${x0 + 7}" y="${y - 10}" font-size="10" font-weight="700" fill="#dc2626" font-family="monospace">${elevationVal}</text>
-      <text x="${x0 + 7}" y="${y + 13}" font-size="10" font-weight="600" fill="#0369a1" font-family="sans-serif">${label}</text>
+      <line x1="${x}" y1="${y}" x2="${symbolX}" y2="${y}" stroke="#0284c7" stroke-width="0.8" stroke-dasharray="10 3 2 3" />
+      <polygon points="${symbolX - 5},${y - 8} ${symbolX + 5},${y - 8} ${symbolX},${y}" fill="#0284c7" />
+      <line x1="${symbolX - 5}" y1="${y - 8}" x2="${symbolX + 62}" y2="${y - 8}" stroke="#0284c7" stroke-width="1.2" />
+      <text x="${symbolX + 7}" y="${y - 11}" font-size="10" font-weight="700" fill="#dc2626" font-family="monospace">${elevationVal}</text>
+      <text x="${symbolX + 7}" y="${y + 14}" font-size="10" font-weight="600" fill="#0369a1" font-family="sans-serif">${label}</text>
     </g>
   `;
 }
 
-export function renderSectionCutMark(x1: number, y1: number, x2: number, y2: number, label: string, dir: 'up' | 'down' | 'left' | 'right'): string {
-  const arrowSize = 6;
-  let arrowPoints = '';
-  let labelX = x1;
-  let labelY = y1;
-
-  if (dir === 'right') {
-    arrowPoints = `${x1 + 1},${y1 - arrowSize / 2} ${x1 + 8},${y1} ${x1 + 1},${y1 + arrowSize / 2}`;
-    labelX = x1 - 10;
-    labelY = y1 + 4;
-  } else if (dir === 'left') {
-    arrowPoints = `${x1 - 1},${y1 - arrowSize / 2} ${x1 - 8},${y1} ${x1 - 1},${y1 + arrowSize / 2}`;
-    labelX = x1 + 10;
-    labelY = y1 + 4;
-  } else if (dir === 'down') {
-    arrowPoints = `${x1 - arrowSize / 2},${y1 + 1} ${x1},${y1 + 8} ${x1 + arrowSize / 2},${y1 + 1}`;
-    labelX = x1;
-    labelY = y1 - 8;
-  } else {
-    arrowPoints = `${x1 - arrowSize / 2},${y1 - 1} ${x1},${y1 - 8} ${x1 + arrowSize / 2},${y1 - 1}`;
-    labelX = x1;
-    labelY = y1 + 16;
+/**
+ * Вертикальная ось отметок с размерами между уровнями (150, 150, ...).
+ * axisX — x оси; уровни считаются от baseY вверх с шагом stepHeight.
+ */
+export function renderLevelAxis(axisX: number, baseY: number, stepCount: number, stepHeight: number): string {
+  const parts: string[] = [
+    `<line x1="${axisX}" y1="${baseY}" x2="${axisX}" y2="${baseY - stepCount * stepHeight}" stroke="#0284c7" stroke-width="0.8" stroke-dasharray="10 3 2 3" />`
+  ];
+  for (let i = 0; i < stepCount; i++) {
+    const yLow = baseY - i * stepHeight;
+    const yHigh = baseY - (i + 1) * stepHeight;
+    const yMid = (yLow + yHigh) / 2;
+    parts.push(
+      `<line x1="${axisX}" y1="${yLow}" x2="${axisX}" y2="${yHigh}" stroke="#0284c7" stroke-width="1.2" marker-start="url(#arrow-start)" marker-end="url(#arrow-end)" />`,
+      `<text transform="translate(${axisX - 5} ${yMid}) rotate(-90)" text-anchor="middle" font-size="11" font-weight="600" fill="#0369a1" font-family="monospace">${Math.round(stepHeight)}</text>`
+    );
   }
+  return `<g class="level-axis">${parts.join('')}</g>`;
+}
+
+export interface SectionCutMarkOptions {
+  /** Точка на линии разреза, в которую упирается стрелка */
+  x: number;
+  y: number;
+  /** Направление взгляда (куда указывает стрелка) */
+  dir: 'up' | 'down' | 'left' | 'right';
+  /** Буква разреза */
+  label: string;
+  /**
+   * В какую сторону от стрелки идёт утолщённая линия разреза и где стоит буква:
+   * для dir left/right: -1 — вверх, 1 — вниз;
+   * для dir up/down:    -1 — влево, 1 — вправо.
+   */
+  barSide: 1 | -1;
+  barLength?: number;
+  shaftLength?: number;
+}
+
+/**
+ * Обозначение секущей плоскости как на эталонных чертежах:
+ * толстая разомкнутая линия + перпендикулярная стрелка взгляда, буква рядом со стрелкой.
+ */
+export function renderSectionCutMark(opts: SectionCutMarkOptions): string {
+  const { x, y, dir, label, barSide, barLength = 26, shaftLength = 32 } = opts;
+  const vx = dir === 'right' ? 1 : dir === 'left' ? -1 : 0;
+  const vy = dir === 'down' ? 1 : dir === 'up' ? -1 : 0;
+  // ось утолщённой линии (перпендикулярна взгляду)
+  const px = vy !== 0 ? barSide : 0;
+  const py = vx !== 0 ? barSide : 0;
+
+  const headLen = 10;
+  const headHalf = 3.5;
+  const barStart = { x: x - px * 4, y: y - py * 4 };
+  const barEnd = { x: x + px * barLength, y: y + py * barLength };
+  const tail = { x: x - vx * shaftLength, y: y - vy * shaftLength };
+  const headBase = { x: x - vx * headLen, y: y - vy * headLen };
+
+  const head = [
+    `${x},${y}`,
+    `${headBase.x + px * headHalf},${headBase.y + py * headHalf}`,
+    `${headBase.x - px * headHalf},${headBase.y - py * headHalf}`
+  ].join(' ');
+
+  const midX = (tail.x + x) / 2;
+  const midY = (tail.y + y) / 2;
+  const labelX = vx !== 0 ? midX : x + px * 11;
+  const labelY = vx !== 0 ? (barSide < 0 ? midY - 6 : midY + 15) : midY + 4;
 
   return `
     <g class="section-cut">
-      <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#0f172a" stroke-width="3" />
-      <polygon points="${arrowPoints}" fill="#0f172a" />
-      <text x="${labelX}" y="${labelY}" font-size="12" font-weight="800" fill="#0f172a" text-anchor="middle" font-family="sans-serif">${label}</text>
+      <line x1="${barStart.x}" y1="${barStart.y}" x2="${barEnd.x}" y2="${barEnd.y}" stroke="#0f172a" stroke-width="3" />
+      <line x1="${tail.x}" y1="${tail.y}" x2="${headBase.x}" y2="${headBase.y}" stroke="#0f172a" stroke-width="1.4" />
+      <polygon points="${head}" fill="#0f172a" />
+      <text x="${labelX}" y="${labelY}" font-size="13" font-weight="800" fill="#0f172a" text-anchor="middle" font-family="sans-serif">${label}</text>
     </g>
   `;
 }
@@ -136,6 +186,6 @@ export function renderNodeCircle(cx: number, cy: number, r: number, label: strin
   `;
 }
 
-export function renderTitle(x: number, y: number, text: string): string {
-  return `<text x="${x}" y="${y}" font-size="14" font-weight="700" fill="#0f172a" font-family="sans-serif">${text}</text>`;
+export function renderTitle(x: number, y: number, text: string, anchor: 'start' | 'middle' | 'end' = 'start'): string {
+  return `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="14" font-weight="700" fill="#0f172a" font-family="sans-serif">${text}</text>`;
 }
