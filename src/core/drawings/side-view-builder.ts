@@ -4,6 +4,8 @@ import {
   STEP_TREAD_DEPTH_MM,
   STEP_TREAD_THICKNESS_MM,
   STEP_NOSE_OVERHANG_MM,
+  STEP_FRAME_MODULE_DEPTH_MM,
+  STEP_FRAME_CLEAR_SPAN_MM,
   RISER_THICKNESS_MM,
   RISER_TOP_CLEARANCE_MM
 } from '@/constants/stairs-config';
@@ -20,38 +22,50 @@ import {
   renderTitle
 } from './svg-primitives';
 
+interface SideViewMargin {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+const VIEW_MARGIN: SideViewMargin = {
+  top: 110,
+  right: 155,
+  bottom: 120,
+  left: 160
+};
+
 export function generateSideViewSvg(layout: StairLayoutResult): string {
   const { stepCount, stepHeight, totalDepth, totalHeight, metrics, risers } = layout;
 
-  const margin = { top: 110, right: 155, bottom: 120, left: 160 };
-  const width = totalDepth + margin.left + margin.right;
-  const height = totalHeight + margin.top + margin.bottom;
+  const width = totalDepth + VIEW_MARGIN.left + VIEW_MARGIN.right;
+  const height = totalHeight + VIEW_MARGIN.top + VIEW_MARGIN.bottom;
+  const originX = VIEW_MARGIN.left;
+  const baseY = VIEW_MARGIN.top + totalHeight;
+  const topTreadY = baseY - totalHeight;
 
   const svgParts: string[] = [
     createSvgHeader(width, height, `0 0 ${width} ${height}`),
     createSvgDefs(),
-    renderTitle(margin.left + totalDepth / 2, 28, 'Вид сбоку', 'middle')
+    renderTitle(originX + totalDepth / 2, 28, 'Вид сбоку', 'middle'),
+    renderLine(originX - 40, baseY, originX + totalDepth + 40, baseY, '#64748b', 1.5)
   ];
 
-  const originX = margin.left;
-  const baseY = margin.top + totalHeight;
-
-  svgParts.push(renderLine(originX - 40, baseY, originX + totalDepth + 40, baseY, '#64748b', 1.5));
-
   const postXPositions: number[] = [originX];
-  const firstPostX = originX + PROFILE_TUBE_SIZE_MM + metrics.upperClearSpanMm;
-  postXPositions.push(firstPostX);
-  for (let r = 2; r <= stepCount; r++) {
-    postXPositions.push(firstPostX + ((r - 1) * (PROFILE_TUBE_SIZE_MM + metrics.lowerClearSpanMm)));
+  for (let r = 1; r <= stepCount; r++) {
+    postXPositions.push(originX + (r * STEP_FRAME_MODULE_DEPTH_MM) - PROFILE_TUBE_SIZE_MM);
   }
 
-  postXPositions.forEach((pX, idx) => {
+  // Вертикальные стойки каркаса
+  postXPositions.forEach((pX, idx: number) => {
     const tier = idx <= 1 ? stepCount : stepCount - idx + 1;
     const tierTopY = baseY - (tier * stepHeight) + STEP_TREAD_THICKNESS_MM + PROFILE_TUBE_SIZE_MM;
     const postH = baseY - tierTopY;
     svgParts.push(renderRect(pX, tierTopY, PROFILE_TUBE_SIZE_MM, postH, '#ffffff', '#0f172a', 1.4));
   });
 
+  // Продольные балки ярусов каркаса
   for (let i = 0; i < stepCount; i++) {
     const stepLvl = i + 1;
     const tierFromTop = stepCount - stepLvl;
@@ -63,6 +77,7 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
     svgParts.push(renderRect(bX1, beamY, bW, PROFILE_TUBE_SIZE_MM, '#ffffff', '#0f172a', 1.4));
   }
 
+  // Доски проступей ступеней
   for (let i = 0; i < stepCount; i++) {
     const stepLvl = i + 1;
     const tierFromTop = stepCount - stepLvl;
@@ -94,6 +109,7 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
     );
   }
 
+  // Подступенки
   if (risers.length > 0) {
     for (let i = 0; i < stepCount; i++) {
       const tierIndex = stepCount - 1 - i;
@@ -105,7 +121,7 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
     }
   }
 
-  // Высотные отметки: линия уровня идёт от кромки проступи к общей оси справа
+  // Высотные отметки уровней
   const levelAxisX = originX + totalDepth + 45;
   const levelSymbolX = levelAxisX + 25;
   svgParts.push(renderLevelAxis(levelAxisX, baseY, stepCount, stepHeight));
@@ -118,6 +134,7 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
     svgParts.push(renderLevelMark(lineStartX, lvlY, `Уровень ${i}`, valStr, levelSymbolX));
   }
 
+  // Размеры высоты
   svgParts.push(
     renderDimensionLine({
       x1: originX,
@@ -128,11 +145,7 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
       offset: -75,
       orientation: 'vertical',
       textSide: 'start'
-    })
-  );
-
-  const topTreadY = baseY - totalHeight;
-  svgParts.push(
+    }),
     renderDimensionLine({
       x1: originX,
       y1: topTreadY,
@@ -142,10 +155,7 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
       offset: -35,
       orientation: 'vertical',
       textSide: 'start'
-    })
-  );
-
-  svgParts.push(
+    }),
     renderDimensionLine({
       x1: originX,
       y1: topTreadY + STEP_TREAD_THICKNESS_MM,
@@ -158,10 +168,10 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
     })
   );
 
-  for (let r = 0; r < postXPositions.length - 1; r++) {
-    const x1 = (postXPositions[r] ?? originX) + PROFILE_TUBE_SIZE_MM;
-    const x2 = postXPositions[r + 1] ?? x1;
-    const spanVal = r === 0 ? metrics.upperClearSpanMm : metrics.lowerClearSpanMm;
+  // Горизонтальные размеры каркаса
+  for (let r = 0; r < stepCount; r++) {
+    const x1 = originX + (r * STEP_FRAME_MODULE_DEPTH_MM) + PROFILE_TUBE_SIZE_MM;
+    const x2 = x1 + STEP_FRAME_CLEAR_SPAN_MM;
 
     svgParts.push(
       renderDimensionLine({
@@ -169,7 +179,7 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
         y1: baseY,
         x2,
         y2: baseY,
-        text: String(spanVal),
+        text: String(STEP_FRAME_CLEAR_SPAN_MM),
         offset: 35,
         orientation: 'horizontal',
         textSide: 'end'
@@ -181,16 +191,13 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
     renderDimensionLine({
       x1: originX,
       y1: baseY,
-      x2: originX + metrics.tierStepRunMm,
+      x2: originX + STEP_FRAME_MODULE_DEPTH_MM,
       y2: baseY,
-      text: String(metrics.tierStepRunMm),
+      text: String(STEP_FRAME_MODULE_DEPTH_MM),
       offset: 65,
       orientation: 'horizontal',
       textSide: 'end'
-    })
-  );
-
-  svgParts.push(
+    }),
     renderDimensionLine({
       x1: originX,
       y1: baseY,
@@ -203,6 +210,7 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
     })
   );
 
+  // Свес носика проступи 20 мм
   const topNoseX = originX + metrics.tierStepRunMm + (risers.length > 0 ? RISER_THICKNESS_MM : 0);
   svgParts.push(
     renderDimensionLine({
@@ -217,25 +225,45 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
     })
   );
 
-  // Разрез А-А: вертикальная секущая плоскость по левому торцу, взгляд слева направо
-  svgParts.push(renderSectionCutMark({ x: originX, y: topTreadY - 45, dir: 'right', label: 'А', barSide: -1 }));
-  svgParts.push(renderSectionCutMark({ x: originX, y: baseY + 28, dir: 'right', label: 'А', barSide: 1 }));
+  // Вертикальный разрез А-А
+  svgParts.push(
+    renderSectionCutMark({ x: originX, y: topTreadY - 45, dir: 'right', label: 'А', barSide: -1 }),
+    renderSectionCutMark({ x: originX, y: baseY + 28, dir: 'right', label: 'А', barSide: 1 })
+  );
 
-  // Горизонтальные сечения (взгляд сверху вниз). Марки выносятся за контур с обеих сторон.
+  // Горизонтальные секущие плоскости (Г-Г, В-В, Б-Б)
   const beamMidY = (level: number): number =>
     baseY - (level * stepHeight) + STEP_TREAD_THICKNESS_MM + PROFILE_TUBE_SIZE_MM / 2;
   const leftCutX = originX - 105;
-  const rightCutX = originX + totalDepth + 12;
-  const planCuts: Array<{ label: string; y: number }> = [
-    { label: 'Д', y: beamMidY(stepCount) },      // верхняя балка каркаса
-    ...(stepCount >= 2 ? [{ label: 'В', y: beamMidY(stepCount - 1) }] : []), // балка второго яруса
-    { label: 'Б', y: baseY - 30 }                // стойки у основания
+
+  const planCuts: Array<{ label: string; y: number; rightX: number }> = [
+    {
+      label: 'Г',
+      y: beamMidY(stepCount),
+      rightX: originX + STEP_TREAD_DEPTH_MM + 14
+    },
+    ...(stepCount >= 2
+      ? [
+        {
+          label: 'В',
+          y: beamMidY(stepCount - 1),
+          rightX: originX + totalDepth + 12
+        }
+      ]
+      : []),
+    {
+      label: 'Б',
+      y: baseY - 30,
+      rightX: originX + totalDepth + 12
+    }
   ];
-  planCuts.forEach(({ label, y }) => {
+
+  planCuts.forEach(({ label, y, rightX }) => {
     svgParts.push(renderSectionCutMark({ x: leftCutX, y, dir: 'down', label, barSide: -1 }));
-    svgParts.push(renderSectionCutMark({ x: rightCutX, y, dir: 'down', label, barSide: 1 }));
+    svgParts.push(renderSectionCutMark({ x: rightX, y, dir: 'down', label, barSide: 1 }));
   });
 
+  // Выносные узлы 1 и 2
   svgParts.push(renderNodeCircle(originX + STEP_TREAD_DEPTH_MM - 10, topTreadY + 12, 18, '1'));
   svgParts.push(renderNodeCircle(originX + 10, topTreadY + 12, 16, '2'));
 

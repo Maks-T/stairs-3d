@@ -9,6 +9,7 @@ import {
   MAX_STAIR_WIDTH_MM,
   MIN_STAIR_HEIGHT_MM,
   MAX_STAIR_HEIGHT_MM,
+  STAIRS_NORMS,
   ATLAS_UV_MAP
 } from '@/constants/stairs-config';
 import { calculateCladdingEstimate } from '@/core/cladding-calculator';
@@ -36,6 +37,7 @@ export class ControlsUI {
   private specTreads!: HTMLElement;
   private specPipe!: HTMLElement;
   private specCladdingBoards!: HTMLElement;
+  private specHardware!: HTMLElement;
   private specSpans!: HTMLElement;
 
   private estimateTableBody!: HTMLElement;
@@ -295,6 +297,10 @@ export class ControlsUI {
             <td id="spec-cladding-boards">- шт</td>
           </tr>
           <tr>
+            <td>Крепеж (саморезы с запасом 10%)</td>
+            <td id="spec-hardware">- шт</td>
+          </tr>
+          <tr>
             <td>Пролёты стоек в свету</td>
             <td id="spec-spans">-</td>
           </tr>
@@ -305,6 +311,7 @@ export class ControlsUI {
     this.specTreads = el.querySelector('#spec-treads') as HTMLElement;
     this.specPipe = el.querySelector('#spec-pipe') as HTMLElement;
     this.specCladdingBoards = el.querySelector('#spec-cladding-boards') as HTMLElement;
+    this.specHardware = el.querySelector('#spec-hardware') as HTMLElement;
     this.specSpans = el.querySelector('#spec-spans') as HTMLElement;
 
     return el;
@@ -389,6 +396,9 @@ export class ControlsUI {
     }
     if (this.specCladdingBoards) {
       this.specCladdingBoards.textContent = `${claddingEst.totalCladdingBoards} шт (~${claddingEst.totalCladdingLinearMeters} м)`;
+    }
+    if (this.specHardware) {
+      this.specHardware.textContent = `${layout.fasteners.totalScrewsWithReserve} шт (${layout.fasteners.treads.countWithReserve} шт 4.8×50 + ${layout.fasteners.risersAndCladding.countWithReserve} шт 4.2×32)`;
     }
     if (this.specSpans) {
       this.specSpans.textContent = layout.spacing.spans.join(' | ') + ' мм';

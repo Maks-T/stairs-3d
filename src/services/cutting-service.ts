@@ -1,6 +1,8 @@
 // @ts-ignore
 import LinearCutter from 'linear-cutter';
-import type { BoxElement, StairLayoutResult } from '../types/stairs';
+import type { BoxElement, StairLayoutResult } from '@/types/stairs';
+import { STEP_FRAME_CLEAR_SPAN_MM } from '@/constants/stairs-config';
+import { PROFILE_TUBE_SIZE_MM } from '@/constants/stairs-config';
 
 const STOCK_PIPE_LENGTH_MM = 6000;
 const SAW_KERF_MM = 3;
@@ -23,12 +25,23 @@ export interface CuttingOptimizationResult {
   cutMap: StockCutMapItem[];
 }
 
+function getPartCategoryName(lengthMm: number, frameWidthMm: number): string {
+  if (Math.abs(lengthMm - Math.round(frameWidthMm)) <= 1) {
+    return `Балка ${lengthMm} мм`;
+  }
+  if (lengthMm === STEP_FRAME_CLEAR_SPAN_MM) {
+    return `Перемычка ${lengthMm} мм`;
+  }
+  return `Стойка ${lengthMm} мм`;
+}
+
 export function calculatePipeCutting(layout: StairLayoutResult): CuttingOptimizationResult {
   const partsMap = new Map<number, { count: number; name: string }>();
 
   layout.frameTubes.forEach((tube: BoxElement) => {
     const lengthMm = Math.round(Math.max(tube.width, tube.height, tube.depth));
-    const current = partsMap.get(lengthMm) ?? { count: 0, name: tube.id };
+    const partName = getPartCategoryName(lengthMm, layout.spacing.frameWidthMm);
+    const current = partsMap.get(lengthMm) ?? { count: 0, name: partName };
     current.count++;
     partsMap.set(lengthMm, current);
   });
@@ -72,7 +85,7 @@ export function calculatePipeCutting(layout: StairLayoutResult): CuttingOptimiza
           .filter((c: any) => c.type === 'part')
           .map((c: any) => ({
             length: Math.round(c.length),
-            name: `${Math.round(c.length)} мм`
+            name: getPartCategoryName(Math.round(c.length), layout.spacing.frameWidthMm)
           }));
 
         const remainLength = item.remain?.total?.length ?? 0;
@@ -106,13 +119,16 @@ export function calculatePipeCutting(layout: StairLayoutResult): CuttingOptimiza
     console.warn('LinearCutter error fallback:', err);
   }
 
-  const fallbackCount = Math.max(1, Math.ceil(layout.totalPipeLengthM / 6));
+  const stockLengthM = STOCK_PIPE_LENGTH_MM / 1000;
+  const fallbackCount = Math.max(1, Math.ceil(layout.totalPipeLengthM / stockLengthM));
+  const totalPurchasedPipeM = fallbackCount * stockLengthM;
+  const totalWasteM = Number((totalPurchasedPipeM - layout.totalPipeLengthM).toFixed(2));
   return {
     pipeStocksCount: fallbackCount,
     totalCuts: layout.frameTubes.length,
-    totalPurchasedPipeM: fallbackCount * 6,
-    totalWasteM: Number((fallbackCount * 6 - layout.totalPipeLengthM).toFixed(2)),
-    wastePercent: 8.5,
+    totalPurchasedPipeM,
+    totalWasteM,
+    wastePercent: Number(((totalWasteM / totalPurchasedPipeM) * 100).toFixed(1)),
     cutMap: []
   };
 }

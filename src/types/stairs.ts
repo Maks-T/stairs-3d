@@ -27,8 +27,8 @@ export interface StepNodeMetrics {
   rearOverhangMm: number;
   tierStepRunMm: number;
   upperFrameDepthMm: number;
-  upperClearSpanMm: number;
-  lowerClearSpanMm: number;
+  stepClearSpanMm: number;
+  sideOverhangMm: number;
 }
 
 export interface TransverseSpacing {
@@ -36,6 +36,32 @@ export interface TransverseSpacing {
   postXOffsets: number[];
   frameWidthMm: number;
   numPosts: number;
+}
+
+export interface FastenersItemSummary {
+  spec: string;
+  countRaw: number;
+  countWithReserve: number;
+  boxesCount: number;
+  drillBitDiameterMm: number;
+}
+
+export interface FastenersCalculationResult {
+  treads: FastenersItemSummary;
+  risersAndCladding: FastenersItemSummary;
+  breakdown: {
+    treadsCount: number;
+    risersCount: number;
+    sideCladdingCount: number;
+  };
+  totalScrewsWithReserve: number;
+}
+
+export interface SideCladdingPiece {
+  tierIndex: number;
+  lengthMm: number;
+  heightMm: number;
+  postsCrossed: number;
 }
 
 export interface StairLayoutResult {
@@ -51,5 +77,6 @@ export interface StairLayoutResult {
   frameTubes: BoxElement[];
   spacing: TransverseSpacing;
   metrics: StepNodeMetrics;
+  fasteners: FastenersCalculationResult;
   totalPipeLengthM: number;
 }

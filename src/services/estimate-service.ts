@@ -70,12 +70,22 @@ export function buildStairsEstimate(
   });
 
   hardwareGroup.add({
-    id: 'item_screws',
-    name: 'Саморезы по металлу 4.2×38 со сверлом (уп. 100 шт)',
+    id: 'item_screws_treads',
+    name: `Саморезы для ДПК ${layout.fasteners.treads.spec} (уп. 100 шт)`,
     unit: 'уп.',
-    count: Math.max(1, Math.ceil(layout.stepCount * 0.8)),
-    value: 450
+    count: layout.fasteners.treads.boxesCount,
+    value: 650
   });
+
+  if (layout.fasteners.risersAndCladding.countRaw > 0) {
+    hardwareGroup.add({
+      id: 'item_screws_cladding',
+      name: `Саморезы ${layout.fasteners.risersAndCladding.spec} (уп. 100 шт)`,
+      unit: 'уп.',
+      count: layout.fasteners.risersAndCladding.boxesCount,
+      value: 490
+    });
+  }
 
   hardwareGroup.add({
     id: 'item_brackets',

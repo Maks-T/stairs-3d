@@ -6,8 +6,8 @@ import {
   TARGET_STEP_HEIGHT_MM,
   MAX_STRINGER_AXIS_STEP_MM,
   RISER_TOP_CLEARANCE_MM,
-  RISER_STOCK_HEIGHT_MM,
-  DRAINAGE_GAP_MM
+  STEP_FRAME_MODULE_DEPTH_MM,
+  STEP_FRAME_CLEAR_SPAN_MM
 } from '../constants/stairs-config';
 import type {
   BoxElement,
@@ -17,6 +17,8 @@ import type {
 } from '../types/stairs';
 import { calculateStepNodeMetrics, calculateVisibleRiserHeight } from './nodes/step-node-calculator';
 import { calculateTransverseSpacing } from './spacing-calculator';
+import { calculateSideCladdingPieces } from './cladding-calculator';
+import { calculateFasteners } from './fasteners-calculator';
 
 function generateTreadElements(
   stepCount: number,
@@ -77,40 +79,33 @@ function generateRiserElements(
 function generateCladdingElements(
   stepCount: number,
   stepHeight: number,
-  totalWidth: number,
-  totalHeight: number,
-  metrics: StepNodeMetrics
+  totalWidth: number
 ): BoxElement[] {
   const cladding: BoxElement[] = [];
-  const halfWidth = totalWidth / 2;
-  const boardThick = RISER_THICKNESS_MM;
-  const slatHeight = RISER_STOCK_HEIGHT_MM;
-  const gap = 3;
+  const sideX = (totalWidth / 2) - (RISER_THICKNESS_MM / 2);
+  const sidePieces = calculateSideCladdingPieces(stepCount);
 
-  const sideRows = Math.ceil(totalHeight / (slatHeight + gap));
-  for (let r = 0; r < sideRows; r++) {
-    const currentH = Math.min(slatHeight, totalHeight - (r * (slatHeight + gap)));
-    const rowY = (r * (slatHeight + gap)) + (currentH / 2);
-    const rowTopY = rowY + (currentH / 2);
-    if (currentH <= 0) break;
+  let currentY = 0;
+  sidePieces.forEach((piece) => {
+    const tierFromBottom = piece.tierIndex;
+    const yCenter = currentY + (piece.heightMm / 2);
+    const zCenter = piece.lengthMm / 2;
 
-    const matchingStepIdx = Math.min(stepCount - 1, Math.floor(rowTopY / stepHeight));
-    const tierFromTop = stepCount - 1 - matchingStepIdx;
-    const sideDepth = (tierFromTop + 1) * metrics.tierStepRunMm;
-    const zCenter = sideDepth / 2;
-
-    [-halfWidth + (boardThick / 2), halfWidth - (boardThick / 2)].forEach((xPos, sideIdx) => {
+    [-sideX, sideX].forEach((xPos, sideIdx) => {
       cladding.push({
-        id: `cladding-side-${sideIdx === 0 ? 'left' : 'right'}-row-${r + 1}`,
+        id: `cladding-side-${sideIdx === 0 ? 'left' : 'right'}-tier-${tierFromBottom}`,
         x: xPos,
-        y: rowY,
+        y: yCenter,
         z: zCenter,
-        width: boardThick,
-        height: currentH,
-        depth: sideDepth
+        width: RISER_THICKNESS_MM,
+        height: piece.heightMm,
+        depth: piece.lengthMm
       });
     });
-  }
+
+    currentY += piece.heightMm;
+  });
+
   return cladding;
 }
 
@@ -157,9 +152,11 @@ function generateFrameTubes(
     const beamY = (stepLevel * stepHeight) - STEP_TREAD_THICKNESS_MM - (PROFILE_TUBE_SIZE_MM / 2);
     const tierFromTop = stepCount - stepLevel;
 
-    const rearZ = rowZCenters[tierFromTop];
-    const frontZ = rowZCenters[tierFromTop + 1];
-    if (rearZ === undefined || frontZ === undefined) continue;
+    const tierZStart = tierFromTop * STEP_FRAME_MODULE_DEPTH_MM;
+    const tierZEnd = (tierFromTop + 1) * STEP_FRAME_MODULE_DEPTH_MM;
+    const rearZ = tierZStart + (PROFILE_TUBE_SIZE_MM / 2);
+    const frontZ = tierZEnd - (PROFILE_TUBE_SIZE_MM / 2);
+    const stringerZ = (tierZStart + tierZEnd) / 2;
 
     tubes.push({
       id: `beam-front-lvl${stepLevel}`,
@@ -183,12 +180,6 @@ function generateFrameTubes(
     });
     totalLengthMm += spacing.frameWidthMm;
 
-    const isTop = stepLevel === stepCount;
-    const clearLength = isTop ? metrics.upperClearSpanMm : metrics.lowerClearSpanMm;
-    const stringerZ = isTop
-      ? (PROFILE_TUBE_SIZE_MM + (271 - PROFILE_TUBE_SIZE_MM)) / 2
-      : (tierFromTop * metrics.tierStepRunMm) + (231 / 2);
-
     spacing.postXOffsets.forEach((xOff, pIdx) => {
       const postX = -halfWidth + xOff + (PROFILE_TUBE_SIZE_MM / 2);
       tubes.push({
@@ -198,9 +189,9 @@ function generateFrameTubes(
         z: stringerZ,
         width: PROFILE_TUBE_SIZE_MM,
         height: PROFILE_TUBE_SIZE_MM,
-        depth: clearLength
+        depth: STEP_FRAME_CLEAR_SPAN_MM
       });
-      totalLengthMm += clearLength;
+      totalLengthMm += STEP_FRAME_CLEAR_SPAN_MM;
     });
   }
 
@@ -224,11 +215,11 @@ export function calculateStairLayout(
     MAX_STRINGER_AXIS_STEP_MM
   );
 
-  const totalDepth = (stepCount * metrics.tierStepRunMm) + metrics.frontOverhangMm;
+  const totalDepth = (stepCount * STEP_FRAME_MODULE_DEPTH_MM) + metrics.frontOverhangMm;
   const visibleRiserHeight = calculateVisibleRiserHeight(stepHeight, STEP_TREAD_THICKNESS_MM);
 
   const cladding = hasSideCladding
-    ? generateCladdingElements(stepCount, stepHeight, widthMm, heightMm, metrics)
+    ? generateCladdingElements(stepCount, stepHeight, widthMm)
     : [];
   const treads = generateTreadElements(stepCount, stepHeight, widthMm, metrics);
   const risers = hasRisers
@@ -239,6 +230,15 @@ export function calculateStairLayout(
     stepHeight,
     spacing,
     metrics
+  );
+
+  const sidePieces = calculateSideCladdingPieces(stepCount);
+  const fasteners = calculateFasteners(
+    stepCount,
+    spacing.numPosts,
+    hasRisers,
+    hasSideCladding,
+    sidePieces
   );
 
   return {
@@ -254,6 +254,7 @@ export function calculateStairLayout(
     frameTubes,
     spacing,
     metrics,
+    fasteners,
     totalPipeLengthM: Number((totalLengthMm / 1000).toFixed(2))
   };
 }

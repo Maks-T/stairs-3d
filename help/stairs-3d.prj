@@ -1,0 +1,16 @@
+;;; VLisp project file [V2.0] stairs-3d saved to:[d:\sand\stairs-3d\help] at:[10/27/2026]
+(VLISP-PROJECT-LIST 
+  :NAME
+  stairs-3d
+  :OWN-LIST
+  ("insert_stamp" "fill_stamp")
+  :FAS-DIRECTORY
+  nil
+  :TMP-DIRECTORY
+  nil
+  :PROJECT-KEYS
+  (:BUILD (:standard))
+  :CONTEXT-ID
+  :AUTOLISP
+)
+;;; EOF
