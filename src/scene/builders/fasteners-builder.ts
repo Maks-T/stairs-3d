@@ -1,16 +1,13 @@
 import * as THREE from 'three';
-import { FASTENERS_GEOMETRY_CONFIG as G } from '@/constants/stairs-config';
-import type { FastenerPoint } from '@/types/stairs';
+import { SCREW_LOOK as G } from '../scene-config';
+import type { FastenerPoint } from '@calculation/stairs';
 
 const LATHE_SEGMENTS = 16;
 const DOME_STEPS = 6;
-/** Головка чуть выступает над доской, чтобы читаться на любой текстуре */
 const HEAD_LIFT_MM = 0.4;
 const UP = new THREE.Vector3(0, 1, 0);
 
-/**
- * Саморез вдоль оси Y: стержень с острием уходит вниз (в доску), полукруглая головка над плоскостью Y = 0.
- */
+// саморез вдоль Y, головка над Y = 0
 function createScrewGeometry(shaftLength: number, shaftRadius: number, headRadius: number, headHeight: number): THREE.BufferGeometry {
   const profile: THREE.Vector2[] = [
     new THREE.Vector2(0, -shaftLength),
@@ -34,7 +31,7 @@ function createScrewMaterial(): THREE.MeshStandardMaterial {
     color,
     metalness: G.METALNESS,
     roughness: G.ROUGHNESS,
-    // без env-карты металл темнеет: лёгкое свечение держит цвет на тёмных досках
+    // чтобы не темнел без env-карты
     emissive: color,
     emissiveIntensity: G.EMISSIVE_INTENSITY
   });
@@ -83,7 +80,7 @@ export class FastenersBuilder {
 
     const boardPoints = points.filter((p) => p.type !== 'tread');
     if (boardPoints.length > 0) {
-      const geometry = createScrewGeometry(G.CLADDING_SHAFT_LENGTH_MM, G.CLADDING_SHAFT_RADIUS_MM, G.CLADDING_HEAD_RADIUS_MM, G.CLADDING_HEAD_HEIGHT_MM);
+      const geometry = createScrewGeometry(G.BOARD_SHAFT_LENGTH_MM, G.BOARD_SHAFT_RADIUS_MM, G.BOARD_HEAD_RADIUS_MM, G.BOARD_HEAD_HEIGHT_MM);
       group.add(createScrewMesh(boardPoints, geometry, material, 'board-screws'));
     }
 

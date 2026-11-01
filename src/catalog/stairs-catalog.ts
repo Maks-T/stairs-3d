@@ -1,6 +1,5 @@
 import rawCatalog from './stairs-catalog.json';
-import { applyFrameGeometry, POST_PITCH_MM, STEP_FRAME_CLEAR_SPAN_MM } from '@/constants/stairs-config';
-import type { StairLayoutResult } from '@/types/stairs';
+import type { StairLayoutResult, StairSpec } from '@calculation/stairs';
 
 export interface ProfileSpec {
   id: string;
@@ -23,7 +22,7 @@ export interface TreadSpec {
   maxJoistPitchMm: number;
 }
 
-/** Доска подступенков и боковой зашивки (заборная доска) */
+// доска подступенков и обшивки
 export interface CladdingSpec {
   id: string;
   name: string;
@@ -31,6 +30,12 @@ export interface CladdingSpec {
   widthMm: number;
   stockLengthsMm: number[];
   pricePerMeter: number;
+}
+
+export interface CatalogSelection {
+  profile: ProfileSpec;
+  tread: TreadSpec;
+  cladding: CladdingSpec;
 }
 
 interface CatalogFile {
@@ -45,83 +50,53 @@ export const DEFAULT_PROFILE_ID = 'sq-40x40x2';
 export const DEFAULT_TREAD_ID = 'cm-305';
 export const DEFAULT_CLADDING_ID = 'mpk-11x145';
 
-/** Минимальный просвет перемычки, при котором ещё можно варить и красить каркас */
+// мин. просвет перемычки
 const MIN_CLEAR_SPAN_MM = 100;
+const MAX_POST_PITCH_MM = 600;
 
-let activeProfile: ProfileSpec = findProfile(DEFAULT_PROFILE_ID);
-let activeTread: TreadSpec = findTread(DEFAULT_TREAD_ID);
-let activeCladding: CladdingSpec = findCladding(DEFAULT_CLADDING_ID);
-
-function findProfile(id: string): ProfileSpec {
-  const found = STAIRS_CATALOG.profiles.find((p) => p.id === id) ?? STAIRS_CATALOG.profiles[0];
-  if (!found) throw new Error('Каталог профилей пуст');
+function pick<T extends { id: string }>(items: T[], id: string, label: string): T {
+  const found = items.find((item) => item.id === id) ?? items[0];
+  if (!found) throw new Error(`Каталог пуст: ${label}`);
   return found;
 }
 
-function findTread(id: string): TreadSpec {
-  const found = STAIRS_CATALOG.treads.find((t) => t.id === id) ?? STAIRS_CATALOG.treads[0];
-  if (!found) throw new Error('Каталог ступеней пуст');
-  return found;
+export function resolveSelection(ids: { profileId: string; treadId: string; claddingId: string }): CatalogSelection {
+  return {
+    profile: pick(STAIRS_CATALOG.profiles, ids.profileId, 'профили'),
+    tread: pick(STAIRS_CATALOG.treads, ids.treadId, 'ступени'),
+    cladding: pick(STAIRS_CATALOG.claddings, ids.claddingId, 'доски обшивки')
+  };
 }
 
-function findCladding(id: string): CladdingSpec {
-  const found = STAIRS_CATALOG.claddings.find((c) => c.id === id) ?? STAIRS_CATALOG.claddings[0];
-  if (!found) throw new Error('Каталог досок зашивки пуст');
-  return found;
+export function toStairSpec(s: CatalogSelection): StairSpec {
+  return {
+    tread: { depthMm: s.tread.depthMm, thicknessMm: s.tread.thicknessMm, maxJoistPitchMm: s.tread.maxJoistPitchMm },
+    board: { thicknessMm: s.cladding.thicknessMm, widthMm: s.cladding.widthMm },
+    tube: { sizeMm: s.profile.sizeMm }
+  };
 }
 
-export function getActiveCladding(): CladdingSpec {
-  return activeCladding;
-}
-
-export function getActiveProfile(): ProfileSpec {
-  return activeProfile;
-}
-
-export function getActiveTread(): TreadSpec {
-  return activeTread;
-}
-
-/** Делает выбранные профиль и ступень активными и пересчитывает геометрию каркаса. Вызывать перед расчётом раскладки. */
-export function applyCatalogSelection(profileId: string, treadId: string, claddingId: string = DEFAULT_CLADDING_ID, postPitchMm?: number): void {
-  activeProfile = findProfile(profileId);
-  activeTread = findTread(treadId);
-  activeCladding = findCladding(claddingId);
-  applyFrameGeometry({
-    profileSizeMm: activeProfile.sizeMm,
-    profileWallMm: activeProfile.wallMm,
-    treadDepthMm: activeTread.depthMm,
-    treadThicknessMm: activeTread.thicknessMm,
-    maxJoistPitchMm: activeTread.maxJoistPitchMm,
-    claddingThicknessMm: activeCladding.thicknessMm,
-    claddingWidthMm: activeCladding.widthMm,
-    postPitchMm
-  });
-}
-
-/** Предупреждения по выбранным профилю и ступени для текущих размеров лестницы (не блокируют расчёт) */
-export function checkCatalogSelection(widthMm: number, heightMm: number, layout?: StairLayoutResult): string[] {
+export function checkCatalogSelection(s: CatalogSelection, layout: StairLayoutResult): string[] {
   const warnings: string[] = [];
-  const p = activeProfile;
+  const { profile: p, tread } = s;
+  const { module: m, totalWidth, totalHeight } = layout;
 
-  if (widthMm > p.limits.maxWidthMm) {
-    warnings.push(`Ширина ${widthMm} мм больше ориентира для ${p.name} (${p.limits.maxWidthMm} мм): нужен профиль крупнее или расчёт.`);
+  if (totalWidth > p.limits.maxWidthMm) {
+    warnings.push(`Ширина ${totalWidth} мм больше ориентира для ${p.name} (${p.limits.maxWidthMm} мм): нужен профиль крупнее или расчёт.`);
   }
-  if (heightMm > p.limits.maxHeightMm) {
-    warnings.push(`Высота ${heightMm} мм больше ориентира для ${p.name} (${p.limits.maxHeightMm} мм): нужен профиль крупнее или расчёт.`);
+  if (totalHeight > p.limits.maxHeightMm) {
+    warnings.push(`Высота ${totalHeight} мм больше ориентира для ${p.name} (${p.limits.maxHeightMm} мм): нужен профиль крупнее или расчёт.`);
   }
-  if (STEP_FRAME_CLEAR_SPAN_MM < MIN_CLEAR_SPAN_MM) {
-    warnings.push(`Просвет перемычки ${STEP_FRAME_CLEAR_SPAN_MM} мм слишком мал для ${p.name} на ступени ${activeTread.depthMm} мм.`);
+  if (m.clearSpan < MIN_CLEAR_SPAN_MM) {
+    warnings.push(`Просвет перемычки ${m.clearSpan} мм слишком мал для ${p.name} на ступени ${tread.depthMm} мм.`);
   }
-  if (POST_PITCH_MM > 600) {
-    warnings.push(`Шаг опор ${POST_PITCH_MM} мм велик для балок ${p.name}: проверьте прогиб расчётом.`);
+  if (m.postPitch > MAX_POST_PITCH_MM) {
+    warnings.push(`Шаг опор ${m.postPitch} мм велик для балок ${p.name}: проверьте прогиб расчётом.`);
   }
-  if (layout) {
-    const maxStock = Math.max(...activeTread.stockLengthsMm);
-    const longest = Math.max(...layout.treads.map((t) => t.width));
-    if (longest > maxStock) {
-      warnings.push(`Самая длинная ступень ${Math.round(longest)} мм длиннее доски ${maxStock} мм: потребуется стык.`);
-    }
+  const maxStock = Math.max(...tread.stockLengthsMm);
+  const longest = Math.max(...layout.treads.map((t) => t.width));
+  if (longest > maxStock) {
+    warnings.push(`Самая длинная ступень ${Math.round(longest)} мм длиннее доски ${maxStock} мм: потребуется стык.`);
   }
   return warnings;
 }

@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 import { flatManifestPlugin, getVmsBuildConfig } from './config/deploy/vms-nc';
 
 const SRC_DIR = path.resolve(__dirname, './src');
+const CALCULATION_DIR = path.resolve(__dirname, './calculation');
 const PACKAGES_DIR = path.resolve(__dirname, './packages');
 
 export default defineConfig(({ mode }) => ({
@@ -20,6 +21,7 @@ export default defineConfig(({ mode }) => ({
   },
   resolve: {
     alias: [
+      { find: '@calculation', replacement: CALCULATION_DIR },
       { find: '@', replacement: SRC_DIR },
       {
         find: 'estimate',

@@ -1,16 +1,11 @@
-
 import 'dockview/dist/styles/dockview.css';
 import './style.css';
-import { calculateStairLayout } from './core/stair-layout-calculator';
+import { calcStairLayout } from '@calculation/stairs';
+import { resolveSelection, toStairSpec } from './catalog/stairs-catalog';
+import { DEFAULT_PARAMS } from './config/defaults';
 import { SceneManager } from './scene/scene-manager';
 import { ControlsUI } from './ui/controls-ui';
-import type { StairUserParams } from './types/stairs';
-import {
-  applyCatalogSelection,
-  DEFAULT_CLADDING_ID,
-  DEFAULT_PROFILE_ID,
-  DEFAULT_TREAD_ID
-} from './catalog/stairs-catalog';
+import type { StairUserParams } from './types/app';
 
 let activeScene: SceneManager | null = null;
 
@@ -18,44 +13,16 @@ function initStairsApp(): void {
   const root = document.querySelector('#dockview-root') as HTMLElement;
   if (!root) return;
 
-  let controls: ControlsUI | null = null;
-  let currentParams: StairUserParams = {
-    stairType: 'straight',
-    width: 1500,
-    height: 300,
-    viewMode: 'solid',
-    hasRisers: true,
-    hasSideCladding: true,
-    showFasteners: false,
-    atlasIndex: 0,
-    background: 'white',
-    profileId: DEFAULT_PROFILE_ID,
-    treadId: DEFAULT_TREAD_ID,
-    claddingId: DEFAULT_CLADDING_ID
-  };
-
+  let currentParams: StairUserParams = { ...DEFAULT_PARAMS };
   let sceneManager: SceneManager | null = null;
 
-  controls = new ControlsUI(
-    root,
-    (params) => {
-      renderApp(params);
-    },
-    (tubeId) => {
-      sceneManager?.highlightTube(tubeId);
-    }
-  );
+  const controls = new ControlsUI(root, currentParams, renderApp, (tubeId) => sceneManager?.highlightTube(tubeId));
 
-  // Если браузер не смог создать WebGL (лимит контекстов, заблокированный GPU), чертежи, смета и раскрой всё равно работают
+  // нет WebGL
   try {
-    sceneManager = new SceneManager(controls.viewportContainer, () => {
-      renderApp(currentParams);
-    });
+    sceneManager = new SceneManager(controls.viewportContainer, () => renderApp(currentParams));
     activeScene = sceneManager;
-    const resizeObserver = new ResizeObserver(() => {
-      sceneManager?.handleResize();
-    });
-    resizeObserver.observe(controls.viewportContainer);
+    new ResizeObserver(() => sceneManager?.handleResize()).observe(controls.viewportContainer);
   } catch (error) {
     console.error('3D недоступно:', error);
     sceneManager = null;
@@ -65,28 +32,23 @@ function initStairsApp(): void {
 
   function renderApp(params: StairUserParams): void {
     currentParams = params;
-    // Профиль и ступень из каталога задают геометрию каркаса: применяем до расчёта раскладки
-    applyCatalogSelection(
-      params.profileId ?? DEFAULT_PROFILE_ID,
-      params.treadId ?? DEFAULT_TREAD_ID,
-      params.claddingId ?? DEFAULT_CLADDING_ID,
-      params.postPitchMm
-    );
-    const layout = calculateStairLayout(params.width, params.height, {
+    const selection = resolveSelection(params);
+    const layout = calcStairLayout({
       stairType: params.stairType,
+      widthMm: params.width,
+      heightMm: params.height,
       hasRisers: params.hasRisers,
       hasSideCladding: params.hasSideCladding,
-      supportMode: params.supportMode
+      supportMode: params.supportMode,
+      postPitchMm: params.postPitchMm,
+      spec: toStairSpec(selection)
     });
 
     if (sceneManager) {
       sceneManager.setBackground(params.background);
       sceneManager.renderStairs(layout, params.viewMode, params.atlasIndex, params.showFasteners);
     }
-
-    if (controls) {
-      controls.updateAll(layout);
-    }
+    controls.updateAll(layout, selection);
   }
 
   renderApp(currentParams);
@@ -94,10 +56,6 @@ function initStairsApp(): void {
 
 window.addEventListener('DOMContentLoaded', initStairsApp);
 
-// При горячей перезагрузке освобождаем WebGL-контекст
+// HMR: освободить WebGL
 const hot = (import.meta as unknown as { hot?: { dispose: (cb: () => void) => void } }).hot;
-hot?.dispose(() => {
-  activeScene?.dispose();
-});
-
-
+hot?.dispose(() => activeScene?.dispose());

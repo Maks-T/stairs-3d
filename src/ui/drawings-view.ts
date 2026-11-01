@@ -1,10 +1,10 @@
-import type { StairLayoutResult } from '@/types/stairs';
-import type { DrawingViewOption, DrawingViewType } from '@/types/drawings';
-import { generateSideViewSvg } from '@/core/drawings/side-view-builder';
-import { generateFrontViewSvg } from '@/core/drawings/front-view-builder';
-import { generatePlanViewSvg } from '@/core/drawings/plan-view-builder';
-import { generateLevelsViewSvg } from '@/core/drawings/levels-view-builder';
-import { generateFastenersViewSvg } from '@/core/drawings/fasteners-view-builder';
+import type { StairLayoutResult } from '@calculation/stairs';
+import type { DrawingViewOption, DrawingViewType } from '@/drawings/types';
+import { generateSideViewSvg } from '@/drawings/side-view-builder';
+import { generateSectionViewSvg } from '@/drawings/section-view-builder';
+import { generatePlanViewSvg } from '@/drawings/plan-view-builder';
+import { generateLevelsViewSvg } from '@/drawings/levels-view-builder';
+import { generateFastenersViewSvg } from '@/drawings/fasteners-view-builder';
 
 const VIEW_OPTIONS: DrawingViewOption[] = [
   { id: 'side', title: 'Вид сбоку' },
@@ -93,7 +93,7 @@ export class DrawingsView {
     this.bindViewportEvents();
     this.updateZoomLabel();
 
-    // Вкладка может быть скрыта при первом рендере (нулевой размер): вписываем, когда появится размер
+    // вписать, когда вкладка получит размер
     new ResizeObserver(() => {
       if (this.pendingFit && this.svgEl) this.fitToViewport();
     }).observe(this.viewportEl);
@@ -110,7 +110,7 @@ export class DrawingsView {
   }
 
   private bindViewportEvents(): void {
-    // Зум колесом мыши вокруг курсора; Shift + колесо — горизонтальная прокрутка
+    // зум колесом, Shift + колесо прокрутка
     this.viewportEl.addEventListener('wheel', (e: WheelEvent) => {
       if (!this.svgEl) return;
       e.preventDefault();
@@ -122,10 +122,9 @@ export class DrawingsView {
       this.setZoom(this.zoom * factor, e.clientX, e.clientY);
     }, { passive: false });
 
-    // Панорамирование перетаскиванием
+    // панорамирование
     this.viewportEl.addEventListener('mousedown', (e: MouseEvent) => {
       if (e.button !== 0) return;
-      // не перехватываем клики по полосам прокрутки
       const vpRect = this.viewportEl.getBoundingClientRect();
       if (e.clientX - vpRect.left > this.viewportEl.clientWidth || e.clientY - vpRect.top > this.viewportEl.clientHeight) return;
       this.isPanning = true;
@@ -169,7 +168,7 @@ export class DrawingsView {
 
   private buildSvg(layout: StairLayoutResult): string {
     switch (this.currentView) {
-      case 'front': return generateFrontViewSvg(layout);
+      case 'front': return generateSectionViewSvg(layout);
       case 'plan': return generatePlanViewSvg(layout);
       case 'levels': return generateLevelsViewSvg(layout);
       case 'fasteners': return generateFastenersViewSvg(layout);
@@ -207,7 +206,6 @@ export class DrawingsView {
     this.zoomLabelEl.textContent = `${Math.round(this.zoom * 100)}%`;
   }
 
-  /** Зум с сохранением точки под курсором (или центра окна, если точка не задана) */
   private setZoom(next: number, anchorClientX?: number, anchorClientY?: number): void {
     if (!this.svgEl) return;
     const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
@@ -234,7 +232,6 @@ export class DrawingsView {
     this.setZoom(this.zoom * factor);
   }
 
-  /** Вписать чертёж в окно (не увеличивая выше 200%) */
   private fitToViewport(): void {
     if (!this.svgEl) return;
     const w = this.viewportEl.clientWidth - FIT_PADDING_PX;

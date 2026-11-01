@@ -1,15 +1,15 @@
 
 import * as THREE from 'three';
-import { ATLAS_TEXTURE_PATH, ATLAS_UV_MAP } from '../constants/stairs-config';
-import type { ViewMode } from '../types/stairs';
+import type { ViewMode } from '@/types/app';
+import { ATLAS_TEXTURE_PATH, ATLAS_UV_MAP } from './scene-config';
 
 const FRAME_COLOR = 0x6c7078;
 const FRAME_ROUGHNESS = 0.6;
-const FRAME_METALNESS = 0.1; // без env-карты высокий metalness даёт чёрный цвет
+const FRAME_METALNESS = 0.1;
 const XRAY_OPACITY = 0.32;
-/** Физический размер одной плитки текстуры на доске, мм */
+// размер плитки текстуры, мм
 const TEXTURE_TILE_MM = 300;
-/** Доля плитки, в которой края перекрёстно растушёвываются, чтобы повтор был бесшовным */
+// доля растушёвки краёв плитки
 const SEAM_BLEND_RATIO = 0.25;
 
 export class MaterialsManager {
@@ -34,10 +34,7 @@ export class MaterialsManager {
     };
   }
 
-  /**
-   * Делает плитку бесшовной: края перекрёстно растушёвываются (кросс-фейд по обеим осям).
-   * Это лучше зеркального повтора: на нём появляется ось симметрии (V-образный «шов» посреди ступени).
-   */
+  // бесшовная плитка
   private makeSeamless(src: HTMLCanvasElement): HTMLCanvasElement {
     const w = src.width;
     const h = src.height;
@@ -104,7 +101,6 @@ export class MaterialsManager {
     ctx.drawImage(this.atlasImage, sx, sy, sw, sh, 0, 0, sw, sh);
 
     const texture = new THREE.CanvasTexture(this.makeSeamless(canvas));
-    // UV досок заданы в миллиметрах: одна плитка = TEXTURE_TILE_MM на всех гранях
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(1 / TEXTURE_TILE_MM, 1 / TEXTURE_TILE_MM);
@@ -114,7 +110,6 @@ export class MaterialsManager {
     return texture;
   }
 
-  /** Анизотропная фильтрация убирает мыло на ступенях при взгляде под скользящим углом */
   setMaxAnisotropy(value: number): void {
     this.maxAnisotropy = Math.max(1, value);
   }

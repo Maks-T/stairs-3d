@@ -1,8 +1,8 @@
 
 import { Estimate } from 'estimate';
-import type { StairLayoutResult } from '@/types/stairs';
+import type { StairLayoutResult } from '@calculation/stairs';
+import type { CatalogSelection } from '@/catalog/stairs-catalog';
 import type { BoardCuttingResult, CuttingOptimizationResult } from '@/services/cutting-service';
-import { getActiveCladding, getActiveProfile, getActiveTread } from '@/catalog/stairs-catalog';
 
 export interface FlatEstimateRow {
   id: string;
@@ -16,12 +16,11 @@ export interface FlatEstimateRow {
 
 export function buildStairsEstimate(
   layout: StairLayoutResult,
+  selection: CatalogSelection,
   cuttingResult: CuttingOptimizationResult,
   boardCutting: BoardCuttingResult
 ): { root: Estimate; rows: FlatEstimateRow[]; grandTotal: number } {
-  const profile = getActiveProfile();
-  const tread = getActiveTread();
-  const cladding = getActiveCladding();
+  const { profile, tread, cladding } = selection;
   const treadBoards = boardCutting.treads;
   const claddingBoards = boardCutting.cladding?.boardsCount ?? 0;
   const claddingStock = boardCutting.cladding?.stockLengthMm ?? cladding.stockLengthsMm[0] ?? 3000;

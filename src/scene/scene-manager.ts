@@ -1,7 +1,8 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import type { BackgroundType, StairLayoutResult, ViewMode } from '../types/stairs';
+import type { StairLayoutResult } from '@calculation/stairs';
+import type { BackgroundType, ViewMode } from '@/types/app';
 import { MaterialsManager } from './materials-manager';
 import { FrameBuilder } from './builders/frame-builder';
 import { BoardsBuilder } from './builders/boards-builder';
@@ -33,7 +34,7 @@ export class SceneManager {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.2; // тёмные покрытия иначе уходят в чёрный
+    this.renderer.toneMappingExposure = 1.2;
     container.appendChild(this.renderer.domElement);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -56,7 +57,7 @@ export class SceneManager {
     const ambient = new THREE.AmbientLight(0xffffff, 0.75);
     this.scene.add(ambient);
 
-    // Мягкая подсветка сверху/снизу, чтобы грани каркаса, повёрнутые от солнца, не были чёрными
+    // подсветка граней каркаса
     const hemi = new THREE.HemisphereLight(0xffffff, 0x9aa0a8, 0.55);
     this.scene.add(hemi);
 
@@ -120,7 +121,6 @@ export class SceneManager {
     this.controls.target.set(0, layout.totalHeight / 2, layout.totalDepth / 2);
   }
 
-  /** Подсвечивает элемент каркаса по id (контур + заливка поверх настила); null снимает подсветку */
   public highlightTube(tubeId: string | null): void {
     this.selectedTubeId = tubeId;
     this.applyHighlight();
@@ -138,12 +138,11 @@ export class SceneManager {
     this.clearHighlight();
     if (!this.selectedTubeId) return;
 
-    // Элемент раскроя может быть и трубой каркаса, и доской (ступень, подступенок, зашивка)
     const mesh = this.frameGroup?.getObjectByName(this.selectedTubeId)
       ?? this.boardsGroup?.getObjectByName(this.selectedTubeId);
     if (!(mesh instanceof THREE.Mesh)) return;
 
-    // depthTest выключен: элемент виден сквозь ступени и подступенки
+    // виден сквозь доски
     const fill = new THREE.Mesh(
       mesh.geometry,
       new THREE.MeshBasicMaterial({
@@ -167,7 +166,6 @@ export class SceneManager {
     this.highlightObjects = [fill, edges];
   }
 
-  /** Освобождает WebGL-контекст: иначе при каждой перезагрузке модуля браузер копит контексты и блокирует новые */
   public dispose(): void {
     this.renderer.setAnimationLoop(null);
     this.controls.dispose();

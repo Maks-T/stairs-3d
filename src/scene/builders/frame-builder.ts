@@ -1,6 +1,6 @@
 
 import * as THREE from 'three';
-import type { BoxElement, StairLayoutResult } from '@/types/stairs';
+import type { BoxElement, StairLayoutResult } from '@calculation/stairs';
 import type { MaterialsManager } from '../materials-manager';
 
 function createPrismGeometryFromPolygon(pts: Array<[number, number]>, cx: number, cz: number, h: number): THREE.BufferGeometry {
@@ -8,8 +8,7 @@ function createPrismGeometryFromPolygon(pts: Array<[number, number]>, cx: number
   const p = pts.map(([x, z]) => [x - cx, z - cz] as [number, number]);
   const n = p.length;
 
-  // Верх/низ/бока строим из несвязанных вершин: у каждой грани своя плоская нормаль,
-  // иначе computeVertexNormals сглаживает рёбра и призма выглядит как круглая труба.
+  // плоские нормали граней
   const positions: number[] = [];
   const pushTri = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, outward: THREE.Vector3): void => {
     const normal = new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a));
@@ -22,13 +21,11 @@ function createPrismGeometryFromPolygon(pts: Array<[number, number]>, cx: number
     return new THREE.Vector3(pt[0], y, pt[1]);
   };
 
-  // верх и низ (веер от вершины 0)
   for (let i = 1; i < n - 1; i++) {
     pushTri(v3(0, halfH), v3(i, halfH), v3(i + 1, halfH), new THREE.Vector3(0, 1, 0));
     pushTri(v3(0, -halfH), v3(i, -halfH), v3(i + 1, -halfH), new THREE.Vector3(0, -1, 0));
   }
 
-  // боковые грани: наружу = от центра призмы к центру грани
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
     const a0 = v3(i, -halfH);

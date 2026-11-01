@@ -24,8 +24,9 @@
     /* Алиасы, те же что в vite.config.ts */
     "paths": {
       "@/*": ["./src/*"],
+      "@calculation/*": ["./calculation/*"],
       "estimate": ["./packages/estimate/estimate.d.ts"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "calculation"]
 }

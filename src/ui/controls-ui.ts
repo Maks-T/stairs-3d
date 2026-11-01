@@ -6,15 +6,9 @@ import {
   type IContentRenderer,
   themeLightSpaced
 } from 'dockview';
-import type { BackgroundType, StairLayoutResult, StairUserParams, ViewMode } from '@/types/stairs';
-import {
-  MIN_STAIR_WIDTH_MM,
-  MAX_STAIR_WIDTH_MM,
-  MIN_STAIR_HEIGHT_MM,
-  MAX_STAIR_HEIGHT_MM,
-  ATLAS_UV_MAP,
-  type StairType
-} from '@/constants/stairs-config';
+import { STAIRS_NORMS, type StairLayoutResult, type StairType } from '@calculation/stairs';
+import type { BackgroundType, StairUserParams, ViewMode } from '@/types/app';
+import { ATLAS_UV_MAP } from '@/scene/scene-config';
 import {
   calculateBoardCutting,
   calculatePipeCutting,
@@ -24,16 +18,12 @@ import {
 } from '@/services/cutting-service';
 import { buildStairsEstimate, type FlatEstimateRow } from '@/services/estimate-service';
 import { DrawingsView } from '@/ui/drawings-view';
-import {
-  STAIRS_CATALOG,
-  DEFAULT_CLADDING_ID,
-  DEFAULT_PROFILE_ID,
-  DEFAULT_TREAD_ID,
-  checkCatalogSelection,
-  getActiveCladding,
-  getActiveProfile,
-  getActiveTread
-} from '@/catalog/stairs-catalog';
+import { STAIRS_CATALOG, checkCatalogSelection, type CatalogSelection } from '@/catalog/stairs-catalog';
+
+const MIN_WIDTH = STAIRS_NORMS.MIN_STAIR_WIDTH;
+const MAX_WIDTH = STAIRS_NORMS.MAX_STAIR_WIDTH;
+const MIN_HEIGHT = STAIRS_NORMS.MIN_STEP_HEIGHT;
+const MAX_HEIGHT = STAIRS_NORMS.MAX_STAIR_HEIGHT;
 
 type PanelId =
   | 'panel_viewport'
@@ -49,11 +39,11 @@ interface PanelDef {
   id: PanelId;
   component: string;
   title: string;
-  /** боковая панель: получает начальную ширину ~30% окна */
+  // ширина ~30% окна
   sidebar?: boolean;
 }
 
-/** Порядок важен: опорные панели создаются раньше тех, что к ним привязаны */
+// порядок важен для привязки панелей
 const PANEL_DEFS: PanelDef[] = [
   { id: 'panel_viewport', component: 'viewport', title: '3D Модель' },
   { id: 'panel_drawings', component: 'drawings', title: 'Чертежи' },
@@ -71,6 +61,7 @@ export class ControlsUI {
   private windowMenu: HTMLElement | null = null;
   private windowMenuTrigger: HTMLElement | null = null;
   private lastLayout: StairLayoutResult | null = null;
+  private lastSelection: CatalogSelection | null = null;
   public readonly viewportContainer: HTMLElement;
   private readonly drawingsView: DrawingsView;
 
@@ -92,34 +83,20 @@ export class ControlsUI {
   private specLabelTreads!: HTMLElement;
   private specLabelPipe!: HTMLElement;
 
-  /** id выбранного на карте раскроя элемента каркаса (подсвечивается в 3D) */
   private selectedTubeId: string | null = null;
 
-  private params: StairUserParams = {
-    stairType: 'straight',
-    width: 1500,
-    height: 300,
-    viewMode: 'solid',
-    hasRisers: true,
-    hasSideCladding: true,
-    showFasteners: false,
-    atlasIndex: 0,
-    background: 'white',
-    profileId: DEFAULT_PROFILE_ID,
-    treadId: DEFAULT_TREAD_ID,
-    claddingId: DEFAULT_CLADDING_ID,
-    postPitchMm: 400,
-    supportMode: 'posts'
-  };
+  private params: StairUserParams;
 
   private readonly onChangeCallback: (params: StairUserParams) => void;
   private readonly onTubeSelectCallback: (tubeId: string | null) => void;
 
   constructor(
     rootContainer: HTMLElement,
+    initialParams: StairUserParams,
     onChange: (params: StairUserParams) => void,
     onTubeSelect: (tubeId: string | null) => void = () => {}
   ) {
+    this.params = { ...initialParams };
     this.onChangeCallback = onChange;
     this.onTubeSelectCallback = onTubeSelect;
     this.viewportContainer = document.createElement('div');
@@ -148,7 +125,7 @@ export class ControlsUI {
     this.buildDefaultLayout();
     this.buildMenubar(rootContainer);
 
-    // Закрытие и добавление панелей (в том числе крестиком на вкладке) синхронизируем с меню «Окно»
+    // синхронизация с меню «Окно»
     this.dockviewApi.onDidAddPanel(() => {
       this.syncWindowMenu();
       this.refreshAfterPanelChange();
@@ -156,7 +133,6 @@ export class ControlsUI {
     this.dockviewApi.onDidRemovePanel(() => this.syncWindowMenu());
   }
 
-  /** Куда по умолчанию помещается панель; если опорной панели нет (закрыта), подбирается запасное место */
   private getPanelPosition(id: PanelId): AddPanelPositionOptions | undefined {
     const api = this.dockviewApi;
     const has = (panelId: PanelId): boolean => !!api.getPanel(panelId);
@@ -165,7 +141,6 @@ export class ControlsUI {
       ? { referencePanel: anyPanel.id, direction: 'right' }
       : undefined;
 
-    // Правая колонка: верхний блок (параметры, материалы) и нижний (смета, раскрой, спецификация)
     const topId = (['panel_params', 'panel_materials', 'panel_view'] as PanelId[]).find(has);
     const bottomId = (['panel_estimate', 'panel_cutting', 'panel_spec'] as PanelId[]).find(has);
     const rightOfViewport: AddPanelPositionOptions | undefined = has('panel_viewport')
@@ -217,7 +192,6 @@ export class ControlsUI {
     this.dockviewApi.getPanel(id)?.api.close();
   }
 
-  /** Раскладка по умолчанию: 3D и чертежи слева, параметры сверху справа, смета/раскрой/спецификация снизу справа */
   private buildDefaultLayout(): void {
     PANEL_DEFS.forEach((def) => this.openPanel(def.id));
     this.dockviewApi.getPanel('panel_viewport')?.api.setActive();
@@ -230,9 +204,8 @@ export class ControlsUI {
     this.buildDefaultLayout();
   }
 
-  /** Содержимое панелей создаётся заново при повторном открытии: заполняем его текущими данными */
   private refreshAfterPanelChange(): void {
-    if (this.lastLayout) this.updateAll(this.lastLayout);
+    if (this.lastLayout && this.lastSelection) this.updateAll(this.lastLayout, this.lastSelection);
   }
 
   private buildMenubar(rootContainer: HTMLElement): void {
@@ -313,7 +286,6 @@ export class ControlsUI {
     this.windowMenuTrigger.setAttribute('aria-expanded', String(open));
   }
 
-  /** Галочки в меню «Окно» показывают, какие панели сейчас открыты */
   private syncWindowMenu(): void {
     if (!this.windowMenu) return;
     this.windowMenu.querySelectorAll<HTMLElement>('[data-panel-id]').forEach((item) => {
@@ -362,16 +334,16 @@ export class ControlsUI {
       <div class="cad-group">
         <label class="cad-label">Ширина марша (W), мм</label>
         <div class="cad-row">
-          <input type="range" id="p-slider-width" min="${MIN_STAIR_WIDTH_MM}" max="${MAX_STAIR_WIDTH_MM}" step="50" value="${this.params.width}">
-          <input type="number" id="p-input-width" class="cad-input-number" min="${MIN_STAIR_WIDTH_MM}" max="${MAX_STAIR_WIDTH_MM}" step="10" value="${this.params.width}">
+          <input type="range" id="p-slider-width" min="${MIN_WIDTH}" max="${MAX_WIDTH}" step="50" value="${this.params.width}">
+          <input type="number" id="p-input-width" class="cad-input-number" min="${MIN_WIDTH}" max="${MAX_WIDTH}" step="10" value="${this.params.width}">
         </div>
       </div>
 
       <div class="cad-group">
         <label class="cad-label">Высота крыльца (H), мм</label>
         <div class="cad-row">
-          <input type="range" id="p-slider-height" min="${MIN_STAIR_HEIGHT_MM}" max="${MAX_STAIR_HEIGHT_MM}" step="10" value="${this.params.height}">
-          <input type="number" id="p-input-height" class="cad-input-number" min="${MIN_STAIR_HEIGHT_MM}" max="${MAX_STAIR_HEIGHT_MM}" step="5" value="${this.params.height}">
+          <input type="range" id="p-slider-height" min="${MIN_HEIGHT}" max="${MAX_HEIGHT}" step="10" value="${this.params.height}">
+          <input type="number" id="p-input-height" class="cad-input-number" min="${MIN_HEIGHT}" max="${MAX_HEIGHT}" step="5" value="${this.params.height}">
         </div>
         <div id="p-badge-step-info" class="cad-badge"></div>
       </div>
@@ -379,8 +351,8 @@ export class ControlsUI {
       <div class="cad-group">
         <label class="cad-label">Шаг опор (между осями), мм</label>
         <div class="cad-row">
-          <input type="range" id="p-slider-post" min="250" max="800" step="10" value="${this.params.postPitchMm ?? 400}">
-          <input type="number" id="p-input-post" class="cad-input-number" min="250" max="800" step="10" value="${this.params.postPitchMm ?? 400}">
+          <input type="range" id="p-slider-post" min="250" max="800" step="10" value="${this.params.postPitchMm}">
+          <input type="number" id="p-input-post" class="cad-input-number" min="250" max="800" step="10" value="${this.params.postPitchMm}">
         </div>
       </div>
 
@@ -403,18 +375,18 @@ export class ControlsUI {
     this.badgeStepInfo = el.querySelector('#p-badge-step-info') as HTMLElement;
     this.labelCladdingToggle = el.querySelector('label[for="check-cladding"]') as HTMLElement;
 
-    this.bindButtonGroup(el, '#p-support-group', 'support', this.params.supportMode ?? 'posts', (value) => {
+    this.bindButtonGroup(el, '#p-support-group', 'support', this.params.supportMode, (value) => {
       this.params.supportMode = value === 'concrete' ? 'concrete' : 'posts';
     });
-    this.bindButtonGroup(el, '#p-stair-type-group', 'type', this.params.stairType ?? 'straight', (value) => {
+    this.bindButtonGroup(el, '#p-stair-type-group', 'type', this.params.stairType, (value) => {
       this.params.stairType = value as StairType;
     });
 
     this.bindDimensionPair(
       el.querySelector('#p-slider-width') as HTMLInputElement,
       el.querySelector('#p-input-width') as HTMLInputElement,
-      MIN_STAIR_WIDTH_MM,
-      MAX_STAIR_WIDTH_MM,
+      MIN_WIDTH,
+      MAX_WIDTH,
       (val) => {
         this.params.width = val;
         this.onChangeCallback(this.params);
@@ -423,8 +395,8 @@ export class ControlsUI {
     this.bindDimensionPair(
       el.querySelector('#p-slider-height') as HTMLInputElement,
       el.querySelector('#p-input-height') as HTMLInputElement,
-      MIN_STAIR_HEIGHT_MM,
-      MAX_STAIR_HEIGHT_MM,
+      MIN_HEIGHT,
+      MAX_HEIGHT,
       (val) => {
         this.params.height = val;
         this.onChangeCallback(this.params);
@@ -473,13 +445,13 @@ export class ControlsUI {
       </div>
     `;
 
-    this.bindSelect(el, '#p-select-tread', this.params.treadId ?? DEFAULT_TREAD_ID, (value) => {
+    this.bindSelect(el, '#p-select-tread', this.params.treadId, (value) => {
       this.params.treadId = value;
     });
-    this.bindSelect(el, '#p-select-cladding', this.params.claddingId ?? DEFAULT_CLADDING_ID, (value) => {
+    this.bindSelect(el, '#p-select-cladding', this.params.claddingId, (value) => {
       this.params.claddingId = value;
     });
-    this.bindSelect(el, '#p-select-profile', this.params.profileId ?? DEFAULT_PROFILE_ID, (value) => {
+    this.bindSelect(el, '#p-select-profile', this.params.profileId, (value) => {
       this.params.profileId = value;
     });
 
@@ -539,7 +511,6 @@ export class ControlsUI {
     return el;
   }
 
-  /** Группа кнопок-переключателей: data-атрибут кнопки задаёт значение параметра */
   private bindButtonGroup(
     root: HTMLElement,
     selector: string,
@@ -658,7 +629,7 @@ export class ControlsUI {
       <div id="cutting-bars-list"></div>
     `;
 
-    // Клик по куску (на шкале или в списке) выделяет элемент в 3D; повторный клик снимает выделение
+    // клик по куску выделяет элемент в 3D
     el.addEventListener('click', (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (target.closest('[data-cut-clear]')) {
@@ -693,14 +664,15 @@ export class ControlsUI {
     numberInput.addEventListener('change', () => update(numberInput.value));
   }
 
-  updateAll(layout: StairLayoutResult): void {
+  updateAll(layout: StairLayoutResult, selection: CatalogSelection): void {
     this.lastLayout = layout;
-    const pipeCutting = calculatePipeCutting(layout);
-    const boardCutting = calculateBoardCutting(layout);
-    const estimate = buildStairsEstimate(layout, pipeCutting, boardCutting);
+    this.lastSelection = selection;
+    const pipeCutting = calculatePipeCutting(layout, selection);
+    const boardCutting = calculateBoardCutting(layout, selection);
+    const estimate = buildStairsEstimate(layout, selection, pipeCutting, boardCutting);
 
     this.drawingsView.update(layout);
-    this.updateSpecInfo(layout);
+    this.updateSpecInfo(layout, selection);
 
     if (this.badgeStepInfo) {
       const plan = layout.stepPlan;
@@ -746,13 +718,10 @@ export class ControlsUI {
       this.estimateGrandTotal.textContent = `${estimate.grandTotal.toLocaleString('ru-RU')} ₽`;
     }
 
-    this.renderCutting(pipeCutting, boardCutting);
+    this.renderCutting(pipeCutting, boardCutting, selection);
   }
-  /** Подписи спецификации, подсказки по профилю/ступени и предупреждения */
-  private updateSpecInfo(layout: StairLayoutResult): void {
-    const profile = getActiveProfile();
-    const tread = getActiveTread();
-    const board = getActiveCladding();
+  private updateSpecInfo(layout: StairLayoutResult, selection: CatalogSelection): void {
+    const { profile, tread, cladding: board } = selection;
 
     if (this.specLabelCladding) {
       this.specLabelCladding.textContent = `Заборная доска ${board.name} мм`;
@@ -769,7 +738,7 @@ export class ControlsUI {
     if (this.specWarnings) {
       const warnings = [
         ...(layout.stepPlan?.warnings ?? []),
-        ...checkCatalogSelection(this.params.width, this.params.height, layout)
+        ...checkCatalogSelection(selection, layout)
       ];
       this.specWarnings.hidden = warnings.length === 0;
       this.specWarnings.innerHTML = warnings.map((w) => `<div>⚠ ${w}</div>`).join('');
@@ -777,7 +746,6 @@ export class ControlsUI {
   }
 
 
-  /** Выделение элемента раскроя: подсвечивается на карте и в 3D */
   private selectTube(tubeId: string | null): void {
     this.selectedTubeId = tubeId;
     this.refreshCutSelection();
@@ -808,9 +776,8 @@ export class ControlsUI {
     }
   }
 
-  /** Один блок карты раскроя: заголовок, шкалы хлыстов (в масштабе) и под каждой чипы с размерами с автопереносом строк */
   private renderCutSection(title: string, cutMap: StockCutMapItem[], kind: 'pipe' | 'boards'): string {
-    // Узкие куски на шкале не вмещают подпись, поэтому под шкалой те же куски идут чипами
+    // узким кускам подписи чипами
     const MIN_LABEL_PCT = 6;
     const bars = cutMap
       .map((bar) => {
@@ -858,9 +825,9 @@ export class ControlsUI {
     `;
   }
 
-  private renderCutting(pipeCutting: CuttingOptimizationResult, boardCutting: BoardCuttingResult): void {
+  private renderCutting(pipeCutting: CuttingOptimizationResult, boardCutting: BoardCuttingResult, selection: CatalogSelection): void {
     if (!this.cuttingContainer) return;
-    const profile = getActiveProfile();
+    const { profile } = selection;
     const summary = this.cuttingContainer.querySelector('#cutting-summary');
     const list = this.cuttingContainer.querySelector('#cutting-bars-list');
     const stockM = profile.stockLengthMm / 1000;
@@ -888,7 +855,6 @@ export class ControlsUI {
         (cladding ? this.renderCutSection(sectionTitle(cladding), cladding.cutMap, 'boards') : '');
     }
 
-    // Выбранный элемент мог исчезнуть после пересчёта
     if (this.selectedTubeId && !this.cuttingContainer.querySelector(`[data-tube-id="${this.selectedTubeId}"]`)) {
       this.selectedTubeId = null;
       this.onTubeSelectCallback(null);

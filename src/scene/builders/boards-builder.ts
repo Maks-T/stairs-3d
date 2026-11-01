@@ -1,16 +1,13 @@
 
 import * as THREE from 'three';
-import {
-  STEP_NOSE_LIP_HEIGHT_MM,
-  STEP_NOSE_RADIUS_MM
-} from '@/constants/stairs-config';
-import type { BoxElement, StairLayoutResult, ViewMode } from '@/types/stairs';
+import type { BoxElement, StairLayoutResult } from '@calculation/stairs';
+import type { ViewMode } from '@/types/app';
+import { TREAD_NOSE } from '../scene-config';
 import type { MaterialsManager } from '../materials-manager';
 
-const NOSE_LIP_THICKNESS_MM = 20;
 const UV_OFFSET_RANGE_MM = 1800;
 
-/** Смещение текстуры, зависящее от id доски: соседние доски не повторяют один и тот же рисунок */
+// сдвиг текстуры по id
 function textureOffsetMm(id: string): [number, number] {
   let hash = 2166136261;
   for (let i = 0; i < id.length; i++) {
@@ -22,10 +19,7 @@ function textureOffsetMm(id: string): [number, number] {
   return [a, b];
 }
 
-/**
- * UV граней бруса в миллиметрах: рисунок идёт вдоль длинной стороны доски и одного масштаба на всех гранях.
- * Порядок граней BoxGeometry: +x, -x, +y, -y, +z, -z (по 4 вершины).
- */
+// UV в мм, грани BoxGeometry: +x -x +y -y +z -z
 function applyPhysicalBoxUv(geom: THREE.BoxGeometry, w: number, h: number, d: number, offset: [number, number]): void {
   const uv = geom.getAttribute('uv');
   const faces: Array<[number, number]> = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
@@ -50,8 +44,8 @@ function createMiterTreadGeometry(
   const halfH = height / 2;
   const halfD = depth / 2;
   const halfW = width / 2;
-  const lipH = STEP_NOSE_LIP_HEIGHT_MM;
-  const r = STEP_NOSE_RADIUS_MM;
+  const lipH = TREAD_NOSE.LIP_HEIGHT_MM;
+  const r = TREAD_NOSE.RADIUS_MM;
 
   const profilePoints: Array<[number, number]> = [
     [-halfD, halfH],
@@ -59,9 +53,9 @@ function createMiterTreadGeometry(
     [halfD, halfH - r],
     [halfD, -halfH - lipH + r],
     [halfD - r, -halfH - lipH],
-    [halfD - NOSE_LIP_THICKNESS_MM + r, -halfH - lipH],
-    [halfD - NOSE_LIP_THICKNESS_MM, -halfH - lipH + r],
-    [halfD - NOSE_LIP_THICKNESS_MM, -halfH],
+    [halfD - TREAD_NOSE.LIP_THICKNESS_MM + r, -halfH - lipH],
+    [halfD - TREAD_NOSE.LIP_THICKNESS_MM, -halfH - lipH + r],
+    [halfD - TREAD_NOSE.LIP_THICKNESS_MM, -halfH],
     [-halfD, -halfH]
   ];
 
@@ -91,7 +85,6 @@ function createMiterTreadGeometry(
     const pt = profilePoints[i];
     if (!pt) continue;
     const [z, y] = pt;
-    // UV в миллиметрах: u вдоль длины ступени, v вдоль профиля (верх, носик, низ)
     const v = (cumDist[i] ?? 0) + offset[1];
 
     const xL = getXLeft(z);
