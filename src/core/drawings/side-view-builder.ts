@@ -1,3 +1,4 @@
+
 import type { StairLayoutResult } from '@/types/stairs';
 import {
   PROFILE_TUBE_SIZE_MM,
@@ -16,11 +17,14 @@ import {
   renderLevelAxis,
   renderLevelMark,
   renderLine,
-  renderNodeCircle,
+  renderPolygon,
   renderRect,
   renderSectionCutMark,
+  renderText,
   renderTitle
 } from './svg-primitives';
+import { DRAW } from './drawing-style';
+import { getLevelSectionLetter } from './section-labels';
 
 interface SideViewMargin {
   top: number;
@@ -48,36 +52,53 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
   const svgParts: string[] = [
     createSvgHeader(width, height, `0 0 ${width} ${height}`),
     createSvgDefs(),
-    renderTitle(originX + totalDepth / 2, 28, 'Вид сбоку', 'middle'),
-    renderLine(originX - 40, baseY, originX + totalDepth + 40, baseY, '#64748b', 1.5)
+    renderTitle(width / 2, DRAW.titleY, 'Вид сбоку'),
+    renderLine(originX - 40, baseY, originX + totalDepth + 40, baseY, DRAW.ground, DRAW.strokeBeam)
   ];
 
-  const postXPositions: number[] = [originX];
-  for (let r = 1; r <= stepCount; r++) {
-    postXPositions.push(originX + (r * STEP_FRAME_MODULE_DEPTH_MM) - PROFILE_TUBE_SIZE_MM);
+  const T = PROFILE_TUBE_SIZE_MM;
+  const M = STEP_FRAME_MODULE_DEPTH_MM;
+  const concrete = layout.supportMode === 'concrete';
+  const beamBottom = (level: number): number => level * stepHeight - STEP_TREAD_THICKNESS_MM - T;
+  const tierStartX = (level: number): number => originX + (stepCount - level) * M;
+  const post = (x: number, top: number, bottom: number): string =>
+    renderRect(x, baseY - top, T, top - bottom, DRAW.fill, DRAW.line, DRAW.strokeOutline);
+
+  if (concrete) {
+    // Разрез по маршу (как Е-Е): бетон ступенями под каркасами ярусов, стойки фасада яруса на одну ступень вниз
+    const outline: Array<[number, number]> = [[originX, baseY]];
+    for (let level = stepCount; level >= 1; level--) {
+      const x = tierStartX(level) + M - T;
+      outline.push([outline[outline.length - 1]?.[0] ?? originX, baseY - beamBottom(level)], [x, baseY - beamBottom(level)]);
+    }
+    outline.push([tierStartX(1) + M - T, baseY]);
+    svgParts.push(renderPolygon(outline, DRAW.concrete, DRAW.line, DRAW.strokeThin));
+    svgParts.push(renderText(originX + (tierStartX(1) - originX) / 2 + M / 2, baseY - beamBottom(1) / 2 - 10, 'Бетон', { size: 14, anchor: 'middle', fill: DRAW.lineThin }));
+
+    for (let level = 1; level <= stepCount; level++) {
+      const x = tierStartX(level) + M - T;
+      svgParts.push(post(x, beamBottom(level), level === 1 ? T : beamBottom(level - 1)));
+    }
+    svgParts.push(renderRect(tierStartX(1) + M - T, baseY - T, T, T, 'url(#steel-hatch)', DRAW.line, DRAW.strokeOutline));
+  } else {
+    // Стойки от земли: у стены и под фасадной балкой каждого яруса
+    svgParts.push(post(originX, beamBottom(stepCount), 0));
+    for (let level = stepCount; level >= 1; level--) {
+      svgParts.push(post(tierStartX(level) + M - T, beamBottom(level), 0));
+    }
   }
 
-  // Вертикальные стойки каркаса
-  postXPositions.forEach((pX, idx: number) => {
-    const tier = idx <= 1 ? stepCount : stepCount - idx + 1;
-    const tierTopY = baseY - (tier * stepHeight) + STEP_TREAD_THICKNESS_MM + PROFILE_TUBE_SIZE_MM;
-    const postH = baseY - tierTopY;
-    svgParts.push(renderRect(pX, tierTopY, PROFILE_TUBE_SIZE_MM, postH, '#ffffff', '#0f172a', 1.4));
-  });
-
-  // Продольные балки ярусов каркаса
-  for (let i = 0; i < stepCount; i++) {
-    const stepLvl = i + 1;
-    const tierFromTop = stepCount - stepLvl;
-    const beamY = baseY - (stepLvl * stepHeight) + STEP_TREAD_THICKNESS_MM;
-    const bX1 = postXPositions[tierFromTop] ?? originX;
-    const bX2 = (postXPositions[tierFromTop + 1] ?? bX1) + PROFILE_TUBE_SIZE_MM;
-    const bW = Math.max(PROFILE_TUBE_SIZE_MM, bX2 - bX1);
-
-    svgParts.push(renderRect(bX1, beamY, bW, PROFILE_TUBE_SIZE_MM, '#ffffff', '#0f172a', 1.4));
+  // Каркасы ярусов: торцы задней и передней балок и перемычка между ними
+  for (let level = 1; level <= stepCount; level++) {
+    const x = tierStartX(level);
+    const y = baseY - beamBottom(level) - T;
+    svgParts.push(
+      renderRect(x, y, M, T, DRAW.fill, DRAW.line, DRAW.strokeOutline),
+      renderLine(x + T, y, x + T, y + T, DRAW.line, DRAW.strokeThin),
+      renderLine(x + M - T, y, x + M - T, y + T, DRAW.line, DRAW.strokeThin)
+    );
   }
 
-  // Доски проступей ступеней
   for (let i = 0; i < stepCount; i++) {
     const stepLvl = i + 1;
     const tierFromTop = stepCount - stepLvl;
@@ -91,8 +112,8 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
         STEP_TREAD_DEPTH_MM,
         STEP_TREAD_THICKNESS_MM,
         'url(#board-hatch)',
-        '#0f172a',
-        1.5
+        DRAW.line,
+        DRAW.strokeBeam
       )
     );
 
@@ -109,7 +130,6 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
     );
   }
 
-  // Подступенки
   if (risers.length > 0) {
     for (let i = 0; i < stepCount; i++) {
       const tierIndex = stepCount - 1 - i;
@@ -117,11 +137,10 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
       const riserH = (stepHeight - STEP_TREAD_THICKNESS_MM) - RISER_TOP_CLEARANCE_MM;
       const riserY = baseY - ((i + 1) * stepHeight) + STEP_TREAD_THICKNESS_MM + RISER_TOP_CLEARANCE_MM;
 
-      svgParts.push(renderRect(riserX, riserY, RISER_THICKNESS_MM, riserH, '#cbd5e1', '#0f172a', 1.2));
+      svgParts.push(renderRect(riserX, riserY, RISER_THICKNESS_MM, riserH, DRAW.riser, DRAW.line, DRAW.strokeOutline));
     }
   }
 
-  // Высотные отметки уровней
   const levelAxisX = originX + totalDepth + 45;
   const levelSymbolX = levelAxisX + 25;
   svgParts.push(renderLevelAxis(levelAxisX, baseY, stepCount, stepHeight));
@@ -134,7 +153,6 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
     svgParts.push(renderLevelMark(lineStartX, lvlY, `Уровень ${i}`, valStr, levelSymbolX));
   }
 
-  // Размеры высоты
   svgParts.push(
     renderDimensionLine({
       x1: originX,
@@ -168,7 +186,6 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
     })
   );
 
-  // Горизонтальные размеры каркаса
   for (let r = 0; r < stepCount; r++) {
     const x1 = originX + (r * STEP_FRAME_MODULE_DEPTH_MM) + PROFILE_TUBE_SIZE_MM;
     const x2 = x1 + STEP_FRAME_CLEAR_SPAN_MM;
@@ -210,7 +227,6 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
     })
   );
 
-  // Свес носика проступи 20 мм
   const topNoseX = originX + metrics.tierStepRunMm + (risers.length > 0 ? RISER_THICKNESS_MM : 0);
   svgParts.push(
     renderDimensionLine({
@@ -225,48 +241,35 @@ export function generateSideViewSvg(layout: StairLayoutResult): string {
     })
   );
 
-  // Вертикальный разрез А-А
   svgParts.push(
     renderSectionCutMark({ x: originX, y: topTreadY - 45, dir: 'right', label: 'А', barSide: -1 }),
     renderSectionCutMark({ x: originX, y: baseY + 28, dir: 'right', label: 'А', barSide: 1 })
   );
 
-  // Горизонтальные секущие плоскости (Г-Г, В-В, Б-Б)
+  // Горизонтальные секущие плоскости: по одной на каждый ярус каркаса (план каркаса яруса на листе «Каркасы по уровням»)
+  // и Б-Б у основания (план стоек)
   const beamMidY = (level: number): number =>
     baseY - (level * stepHeight) + STEP_TREAD_THICKNESS_MM + PROFILE_TUBE_SIZE_MM / 2;
   const leftCutX = originX - 105;
 
-  const planCuts: Array<{ label: string; y: number; rightX: number }> = [
-    {
-      label: 'Г',
-      y: beamMidY(stepCount),
-      rightX: originX + STEP_TREAD_DEPTH_MM + 14
-    },
-    ...(stepCount >= 2
-      ? [
-        {
-          label: 'В',
-          y: beamMidY(stepCount - 1),
-          rightX: originX + totalDepth + 12
-        }
-      ]
-      : []),
-    {
-      label: 'Б',
-      y: baseY - 30,
-      rightX: originX + totalDepth + 12
-    }
-  ];
+  const planCuts: Array<{ label: string; y: number; rightX: number }> = [];
+  for (let level = stepCount; level >= 1; level--) {
+    planCuts.push({
+      label: getLevelSectionLetter(level),
+      y: beamMidY(level),
+      // справа метка встаёт у края проступи своего яруса
+      rightX: originX + ((stepCount - level) * metrics.tierStepRunMm) + STEP_TREAD_DEPTH_MM + 14
+    });
+  }
+  planCuts.push({ label: 'Б', y: baseY - 30, rightX: originX + totalDepth + 12 });
 
   planCuts.forEach(({ label, y, rightX }) => {
     svgParts.push(renderSectionCutMark({ x: leftCutX, y, dir: 'down', label, barSide: -1 }));
     svgParts.push(renderSectionCutMark({ x: rightX, y, dir: 'down', label, barSide: 1 }));
   });
 
-  // Выносные узлы 1 и 2
-  svgParts.push(renderNodeCircle(originX + STEP_TREAD_DEPTH_MM - 10, topTreadY + 12, 18, '1'));
-  svgParts.push(renderNodeCircle(originX + 10, topTreadY + 12, 16, '2'));
-
   svgParts.push('</svg>');
   return svgParts.join('\n');
 }
+
+

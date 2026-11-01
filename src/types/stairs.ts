@@ -1,3 +1,9 @@
+
+import type { StairType } from '@/constants/stairs-config';
+
+/** Чем держится каркас: стойками или бетонным основанием (коробки ярусов) */
+export type SupportMode = 'posts' | 'concrete';
+
 export type ViewMode = 'solid' | 'xray' | 'frame';
 
 export type BackgroundType = 'white' | 'park' | 'sky' | 'no';
@@ -17,6 +23,7 @@ export interface FastenerPoint {
 }
 
 export interface StairUserParams {
+  stairType?: StairType;
   width: number;
   height: number;
   viewMode: ViewMode;
@@ -25,6 +32,12 @@ export interface StairUserParams {
   showFasteners: boolean;
   atlasIndex: number;
   background: BackgroundType;
+  profileId?: string;
+  treadId?: string;
+  claddingId?: string;
+  /** шаг опор между осями, мм */
+  postPitchMm?: number;
+  supportMode?: SupportMode;
 }
 
 export interface BoxElement {
@@ -35,6 +48,10 @@ export interface BoxElement {
   width: number;
   height: number;
   depth: number;
+  rotationY?: number;
+  cutAngleLeftDeg?: number;
+  cutAngleRightDeg?: number;
+  polygonXZ?: Array<[number, number]>;
 }
 
 export interface StepNodeMetrics {
@@ -79,7 +96,10 @@ export interface SideCladdingPiece {
   postsCrossed: number;
 }
 
+import type { StepPlan } from '@/core/step-planner';
+
 export interface StairLayoutResult {
+  stairType: StairType;
   stepCount: number;
   stepHeight: number;
   visibleRiserHeight: number;
@@ -95,4 +115,9 @@ export interface StairLayoutResult {
   fasteners: FastenersCalculationResult;
   fastenerPoints: FastenerPoint[];
   totalPipeLengthM: number;
+  /** подбор числа и высоты ступеней (диапазон, подступенок, предупреждения) */
+  stepPlan?: StepPlan;
+  supportMode?: SupportMode;
 }
+
+

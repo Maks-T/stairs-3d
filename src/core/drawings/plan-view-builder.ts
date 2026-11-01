@@ -1,143 +1,165 @@
 import type { StairLayoutResult } from '@/types/stairs';
 import {
-  PROFILE_TUBE_SIZE_MM,
-  STEP_FRAME_MODULE_DEPTH_MM,
-  STEP_FRAME_CLEAR_SPAN_MM
+  PROFILE_TUBE_SIZE_MM as T
 } from '@/constants/stairs-config';
+import { DRAW } from './drawing-style';
+import {
+  boundsOf,
+  isBaseRail,
+  isPost,
+  treadOutline,
+  tubeOutline,
+  uniqueSorted,
+  type Pt
+} from './plan-geometry';
 import {
   createSvgDefs,
   createSvgHeader,
   renderDimensionLine,
+  renderPolygon,
   renderRect,
+  renderText,
   renderTitle
 } from './svg-primitives';
 
-interface PlanViewMargin {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-}
 
-const PLAN_MARGIN: PlanViewMargin = {
-  top: 75,
-  right: 110,
-  bottom: 90,
-  left: 95
-};
+const MARGIN = { top: 110, right: 150, bottom: 150, left: 150 };
 
+/**
+ * План расположения стоек (сечение Б-Б).
+ * Стойки показаны отдельными квадратами 40×40, настил и балки каркаса под ним едва заметны,
+ * как на чертеже прямой лестницы.
+ */
 export function generatePlanViewSvg(layout: StairLayoutResult): string {
-  const { totalWidth, totalDepth, stepCount, spacing } = layout;
-  const frameWidth = spacing.frameWidthMm;
+  const { frameTubes, treads } = layout;
 
-  const width = totalWidth + PLAN_MARGIN.left + PLAN_MARGIN.right;
-  const height = totalDepth + PLAN_MARGIN.top + PLAN_MARGIN.bottom;
-  const treadOriginX = PLAN_MARGIN.left;
-  const treadOverhang = (totalWidth - frameWidth) / 2;
-  const frameOriginX = treadOriginX + treadOverhang;
-  const originY = PLAN_MARGIN.top;
+  const posts = frameTubes.filter(isPost);
+  const beams = frameTubes.filter((t) => !isPost(t) && !isBaseRail(t));
+  const rails = frameTubes.filter(isBaseRail);
+  // На бетоне сечение Б-Б проходит по нижней коробке: стойки верхних коробок выше него (показаны пунктиром)
+  const cutPosts = posts.filter((p) => p.y - p.height / 2 <= T + 1);
+  const upperPosts = posts.filter((p) => !cutPosts.includes(p));
 
-  const svgParts: string[] = [
-    createSvgHeader(width, height, `0 0 ${width} ${height}`),
+  const allPoints: Pt[] = [];
+  treads.forEach((t) => allPoints.push(...treadOutline(t)));
+  frameTubes.forEach((t) => allPoints.push(...tubeOutline(t)));
+  const b = boundsOf(allPoints);
+
+  const planW = b.maxX - b.minX;
+  const planD = b.maxZ - b.minZ;
+  const svgW = planW + MARGIN.left + MARGIN.right;
+  const svgH = planD + MARGIN.top + MARGIN.bottom;
+  const ox = MARGIN.left - b.minX;
+  const oz = MARGIN.top - b.minZ;
+  const px = (x: number): number => x + ox;
+  const pz = (z: number): number => z + oz;
+
+  const svg: string[] = [
+    createSvgHeader(svgW, svgH, `0 0 ${svgW} ${svgH}`),
     createSvgDefs(),
-    renderTitle(PLAN_MARGIN.left, 35, 'Схема расположения стоек (сечение Б-Б)'),
-    renderRect(frameOriginX, originY, frameWidth, totalDepth, 'none', '#64748b', 1.2)
+    renderTitle(svgW / 2, DRAW.titleY, 'План расположения стоек (сечение Б-Б)')
   ];
 
-  // Координаты Y рядов стоек
-  const rowYList: number[] = [originY];
-  for (let r = 1; r <= stepCount; r++) {
-    rowYList.push(originY + (r * STEP_FRAME_MODULE_DEPTH_MM) - PROFILE_TUBE_SIZE_MM);
-  }
-
-  // Отрисовка стоек 40х40 в узлах сетки
-  rowYList.forEach((rY: number) => {
-    spacing.postXOffsets.forEach((xOff: number) => {
-      const postX = frameOriginX + xOff;
-      svgParts.push(renderRect(postX, rY, PROFILE_TUBE_SIZE_MM, PROFILE_TUBE_SIZE_MM, '#e2e8f0', '#0f172a', 1.5));
+  // Настил: нижние ступени первыми, верхние перекрывают их
+  [...treads]
+    .sort((a, c) => a.y - c.y)
+    .forEach((tread) => {
+      const pts = treadOutline(tread).map(([x, z]) => [px(x), pz(z)] as Pt);
+      svg.push(renderPolygon(pts, DRAW.treadFill, DRAW.treadStroke, DRAW.strokeThin));
     });
+
+  // Балки и диагонали каркаса: тонкий пунктир, чтобы не спорили со стойками
+  svg.push(`<g opacity="${DRAW.beamFaintOpacity}">`);
+  beams.forEach((tube) => {
+    const pts = tubeOutline(tube).map(([x, z]) => [px(x), pz(z)] as Pt);
+    svg.push(renderPolygon(pts, 'none', DRAW.beamFaint, DRAW.strokeThin, 'stroke-dasharray="6 3"'));
+  });
+  svg.push('</g>');
+
+  rails.forEach((rail) => {
+    const pts = tubeOutline(rail).map(([x, z]) => [px(x), pz(z)] as Pt);
+    svg.push(renderPolygon(pts, 'url(#steel-hatch)', DRAW.line, DRAW.strokeThin));
   });
 
-  // Размер ширины каркаса сверху
-  svgParts.push(
-    renderDimensionLine({
-      x1: frameOriginX,
-      y1: originY,
-      x2: frameOriginX + frameWidth,
-      y2: originY,
-      text: String(Math.round(frameWidth)),
-      offset: -25,
-      orientation: 'horizontal'
-    })
-  );
+  upperPosts.forEach((post) => {
+    svg.push(renderRect(px(post.x) - T / 2, pz(post.z) - T / 2, T, T, DRAW.fill, DRAW.lineThin, DRAW.strokeThin, 'stroke-dasharray="4 3"'));
+  });
+  cutPosts.forEach((post) => {
+    svg.push(renderRect(px(post.x) - T / 2, pz(post.z) - T / 2, T, T, DRAW.fill, DRAW.line, DRAW.strokeBeam));
+  });
 
-  // Размеры между стойками в свету снизу
-  for (let i = 0; i < spacing.spans.length; i++) {
-    const span = spacing.spans[i] ?? 0;
-    const x1 = frameOriginX + (spacing.postXOffsets[i] ?? 0) + PROFILE_TUBE_SIZE_MM;
-    const x2 = x1 + span;
+  const postXs = posts.map((p) => p.x);
+  const postZs = posts.map((p) => p.z);
+  if (posts.length > 0) {
+    const frontZ = Math.max(...postZs);
+    const rightX = Math.max(...postXs);
 
-    svgParts.push(
-      renderDimensionLine({
-        x1,
-        y1: originY + totalDepth,
-        x2,
-        y2: originY + totalDepth,
-        text: String(span),
-        offset: 25,
-        orientation: 'horizontal',
-        textSide: 'end'
-      })
-    );
+    // Цепочка по X: осевые расстояния стоек переднего ряда нижнего яруса
+    const frontRowX = uniqueSorted(posts.filter((p) => Math.abs(p.z - frontZ) < 1).map((p) => p.x));
+    const chainBaseZ = pz(frontZ) + T / 2;
+    const chainOffset = pz(b.maxZ) + 32 - chainBaseZ;
+    for (let i = 0; i < frontRowX.length - 1; i++) {
+      const a = frontRowX[i] ?? 0;
+      const c = frontRowX[i + 1] ?? 0;
+      if (c - a < 12) continue;
+      svg.push(renderDimensionLine({
+        x1: px(a), y1: chainBaseZ, x2: px(c), y2: chainBaseZ,
+        text: String(Math.round(c - a)), offset: chainOffset, orientation: 'horizontal', textSide: 'end'
+      }));
+    }
+
+    // Цепочка по Z: осевые расстояния стоек правого ряда
+    const rightColZ = uniqueSorted(posts.filter((p) => Math.abs(p.x - rightX) < 1).map((p) => p.z));
+    const chainBaseX = px(rightX) + T / 2;
+    const sideOffset = px(b.maxX) + 32 - chainBaseX;
+    for (let i = 0; i < rightColZ.length - 1; i++) {
+      const a = rightColZ[i] ?? 0;
+      const c = rightColZ[i + 1] ?? 0;
+      if (c - a < 12) continue;
+      svg.push(renderDimensionLine({
+        x1: chainBaseX, y1: pz(a), x2: chainBaseX, y2: pz(c),
+        text: String(Math.round(c - a)), offset: sideOffset, orientation: 'vertical', textSide: 'end'
+      }));
+    }
   }
 
-  // Полная глубина слева
-  svgParts.push(
+  svg.push(
     renderDimensionLine({
-      x1: treadOriginX,
-      y1: originY,
-      x2: treadOriginX,
-      y2: originY + totalDepth,
-      text: String(Math.round(totalDepth)),
-      offset: -45,
-      orientation: 'vertical',
-      textSide: 'start'
+      x1: px(b.minX), y1: pz(b.minZ), x2: px(b.maxX), y2: pz(b.minZ),
+      text: String(Math.round(planW)), offset: -30, orientation: 'horizontal'
+    }),
+    renderDimensionLine({
+      x1: px(b.minX), y1: pz(b.minZ), x2: px(b.minX), y2: pz(b.maxZ),
+      text: String(Math.round(planD)), offset: -40, orientation: 'vertical', textSide: 'start'
     })
   );
 
-  // Пролеты перемычек 191 мм по глубине справа
-  for (let r = 0; r < stepCount; r++) {
-    const y1 = originY + (r * STEP_FRAME_MODULE_DEPTH_MM) + PROFILE_TUBE_SIZE_MM;
-    const y2 = y1 + STEP_FRAME_CLEAR_SPAN_MM;
-
-    svgParts.push(
-      renderDimensionLine({
-        x1: frameOriginX + frameWidth,
-        y1,
-        x2: frameOriginX + frameWidth,
-        y2,
-        text: String(STEP_FRAME_CLEAR_SPAN_MM),
-        offset: 35,
-        orientation: 'vertical',
-        textSide: 'end'
-      })
+  const legendY = svgH - 80;
+  const legend: string[] = [
+    renderRect(MARGIN.left, legendY - 11, 14, 14, DRAW.fill, DRAW.line, DRAW.strokeBeam),
+    renderText(MARGIN.left + 22, legendY, `Стойка ${T}×${T} мм в сечении, ${cutPosts.length} шт.`, { size: DRAW.noteSize })
+  ];
+  let rowY = legendY + 24;
+  if (upperPosts.length > 0) {
+    legend.push(
+      renderRect(MARGIN.left, rowY - 11, 14, 14, DRAW.fill, DRAW.lineThin, DRAW.strokeThin, 'stroke-dasharray="4 3"'),
+      renderText(MARGIN.left + 22, rowY, `Стойка верхних коробок (выше сечения), ${upperPosts.length} шт.`, { size: DRAW.noteSize })
     );
+    rowY += 24;
   }
-
-  // Модуль шага яруса 271 мм справа
-  svgParts.push(
-    renderDimensionLine({
-      x1: frameOriginX + frameWidth,
-      y1: originY,
-      x2: frameOriginX + frameWidth,
-      y2: originY + STEP_FRAME_MODULE_DEPTH_MM,
-      text: String(STEP_FRAME_MODULE_DEPTH_MM),
-      offset: 60,
-      orientation: 'vertical',
-      textSide: 'end'
-    })
+  if (rails.length > 0) {
+    legend.push(
+      renderRect(MARGIN.left, rowY - 9, 14, 10, 'url(#steel-hatch)', DRAW.line, DRAW.strokeThin),
+      renderText(MARGIN.left + 22, rowY, 'Нижняя обвязка по земле', { size: DRAW.noteSize })
+    );
+    rowY += 24;
+  }
+  legend.push(
+    `<line x1="${MARGIN.left}" y1="${rowY - 4}" x2="${MARGIN.left + 14}" y2="${rowY - 4}" stroke="${DRAW.beamFaint}" stroke-width="${DRAW.strokeThin}" stroke-dasharray="6 3" />`,
+    renderText(MARGIN.left + 22, rowY, 'Балки каркаса под настилом (условно)', { size: DRAW.noteSize })
   );
+  svg.push(...legend);
 
-  svgParts.push('</svg>');
-  return svgParts.join('\n');
+  svg.push('</svg>');
+  return svg.join('\n');
 }

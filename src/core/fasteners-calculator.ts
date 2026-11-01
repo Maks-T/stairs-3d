@@ -1,279 +1,227 @@
-import {
-  FASTENERS_CONFIG,
-  PROFILE_TUBE_SIZE_MM,
-  RISER_THICKNESS_MM,
-  RISER_TOP_CLEARANCE_MM,
-  STEP_FRAME_MODULE_DEPTH_MM,
-  STEP_TREAD_THICKNESS_MM
-} from '@/constants/stairs-config';
+import { CORNER_CONFIG, FASTENERS_CONFIG, PROFILE_TUBE_SIZE_MM as T } from '@/constants/stairs-config';
 import type {
+  BoxElement,
   FastenerPoint,
+  FastenerPointType,
   FastenersCalculationResult,
-  SideCladdingPiece,
-  StepNodeMetrics,
-  TransverseSpacing
+  FastenersItemSummary
 } from '@/types/stairs';
-import { calculateVisibleRiserHeight } from './nodes/step-node-calculator';
+import { isPost, treadOutline, type Pt } from './drawings/plan-geometry';
 
-const RELATIVE_FASTENER_LOW_RATIO = 0.28;
-const RELATIVE_FASTENER_HIGH_RATIO = 0.72;
+/** Ось саморезов ступени: 54 мм от носика и 20 мм от заднего края (ВСТГ.001.000 СБ) */
+const TREAD_SCREW_FROM_NOSE_MM = 54;
+const TREAD_SCREW_FROM_BACK_MM = 20;
+/** Саморезы подступенка и обшивки: 25 мм от верхнего и нижнего края доски */
+const BOARD_SCREW_EDGE_MM = 25;
+const TREAD_EDGE_MARGIN_MM = 8;
+const FACE_TOLERANCE_MM = 2;
 
-export interface FastenerPointsPayload {
-  stepCount: number;
-  stepHeight: number;
-  totalWidth: number;
-  spacing: TransverseSpacing;
-  metrics: StepNodeMetrics;
-  hasRisers: boolean;
-  hasSideCladding: boolean;
-  sidePieces: SideCladdingPiece[];
+type Segment = [Pt, Pt];
+
+function tubeAxis(tube: BoxElement): Segment {
+  if (tube.width >= tube.depth) {
+    return [[tube.x - tube.width / 2, tube.z], [tube.x + tube.width / 2, tube.z]];
+  }
+  return [[tube.x, tube.z - tube.depth / 2], [tube.x, tube.z + tube.depth / 2]];
 }
 
-function calculateItemSummary(
-  countRaw: number,
-  spec: string,
-  drillBitDiameterMm: number
-) {
-  const countWithReserve = Math.ceil(countRaw * FASTENERS_CONFIG.HARDWARE_RESERVE_FACTOR);
-  const boxesCount = Math.max(1, Math.ceil(countWithReserve / FASTENERS_CONFIG.BOX_PACKAGE_SIZE));
+function insidePolygon(poly: Pt[], x: number, z: number): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i];
+    const b = poly[j];
+    if (!a || !b) continue;
+    if (a[1] > z !== b[1] > z && x < ((b[0] - a[0]) * (z - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+}
 
+function distanceToPolygonEdge(poly: Pt[], x: number, z: number): number {
+  let best = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    if (!a || !b) continue;
+    const dx = b[0] - a[0];
+    const dz = b[1] - a[1];
+    const len2 = dx * dx + dz * dz || 1;
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / len2));
+    best = Math.min(best, Math.hypot(x - (a[0] + t * dx), z - (a[1] + t * dz)));
+  }
+  return best;
+}
+
+/**
+ * Саморезы ступени: по 2 на каждую поперечину под доской (лага, перемычка, торец),
+ * на пересечении её оси с осями передней и задней балок яруса.
+ * У торцовки 45° (угол марша) саморезы на тех же осях в 41.21 мм от линии шва, над диагоналями.
+ */
+function treadPoints(treads: BoxElement[], tubes: BoxElement[]): FastenerPoint[] {
+  const points: FastenerPoint[] = [];
+  const supports = tubes.filter((t) => !isPost(t) && !t.polygonXZ && !t.id.startsWith('rail-'));
+
+  treads.forEach((tread) => {
+    const top = tread.y + tread.height / 2;
+    const bottom = tread.y - tread.height / 2;
+    const outline = treadOutline(tread);
+    const rot = tread.rotationY ?? 0;
+    const cos = Math.cos(rot);
+    const sin = Math.sin(rot);
+    const toLocal = ([x, z]: Pt): Pt => {
+      const dx = x - tread.x;
+      const dz = z - tread.z;
+      return [dx * cos - dz * sin, dx * sin + dz * cos];
+    };
+    const toWorld = (u: number, v: number): Pt => [tread.x + u * cos + v * sin, tread.z - u * sin + v * cos];
+    const hw = tread.width / 2;
+    const hd = tread.depth / 2;
+    const lines = [hd - TREAD_SCREW_FROM_NOSE_MM, -hd + TREAD_SCREW_FROM_BACK_MM];
+    const add = (u: number, v: number, suffix: string): void => {
+      const [x, z] = toWorld(u, v);
+      if (!insidePolygon(outline, x, z) || distanceToPolygonEdge(outline, x, z) < TREAD_EDGE_MARGIN_MM) return;
+      points.push({
+        id: `fastener-${tread.id}-${suffix}`,
+        x,
+        y: top,
+        z,
+        normalX: 0,
+        normalY: 1,
+        normalZ: 0,
+        type: 'tread',
+        spec: FASTENERS_CONFIG.TREAD_SCREW_SPEC
+      });
+    };
+
+    [
+      { deg: tread.cutAngleLeftDeg ?? 0, side: -1 },
+      { deg: tread.cutAngleRightDeg ?? 0, side: 1 }
+    ].forEach(({ deg, side }) => {
+      if (deg <= 0) return;
+      const angle = (deg * Math.PI) / 180;
+      const shift = CORNER_CONFIG.SCREW_MITER_OFFSET_MM / Math.cos(angle);
+      lines.forEach((v, k) => {
+        const u = side * (hw - (hd - v) * Math.tan(angle) - shift);
+        add(u, v, `miter${side < 0 ? 'l' : 'r'}-${k === 0 ? 'front' : 'rear'}`);
+      });
+    });
+
+    supports
+      .filter((t) => Math.abs(t.y + t.height / 2 - bottom) < 1)
+      .forEach((tube) => {
+        const [a, b] = tubeAxis(tube).map(toLocal) as [Pt, Pt];
+        const du = b[0] - a[0];
+        const dv = b[1] - a[1];
+        if (Math.abs(dv) < Math.abs(du) - 1) return;
+        const len = Math.hypot(du, dv);
+        const reach = T / len;
+        lines.forEach((v, k) => {
+          const s = (v - a[1]) / dv;
+          if (s < -reach || s > 1 + reach) return;
+          add(a[0] + du * s, v, `${tube.id}-${k === 0 ? 'front' : 'rear'}`);
+        });
+      });
+  });
+
+  return dedupe(points);
+}
+
+/**
+ * Саморезы подступенков и боковой обшивки: по 2 на каждую стойку за доской,
+ * 25 мм от верхнего и нижнего края доски.
+ */
+function boardPoints(boards: BoxElement[], tubes: BoxElement[], type: FastenerPointType): FastenerPoint[] {
+  const points: FastenerPoint[] = [];
+  const posts = tubes.filter(isPost);
+
+  boards.forEach((board) => {
+    const thinAlongX = board.width < board.depth;
+    const y0 = board.y - board.height / 2;
+    const y1 = board.y + board.height / 2;
+    const ys = board.height > 2 * BOARD_SCREW_EDGE_MM + 10 ? [y1 - BOARD_SCREW_EDGE_MM, y0 + BOARD_SCREW_EDGE_MM] : [board.y];
+    const across = thinAlongX ? board.x : board.z;
+    const half = (thinAlongX ? board.width : board.depth) / 2;
+    const alongCenter = thinAlongX ? board.z : board.x;
+    const alongHalf = (thinAlongX ? board.depth : board.width) / 2;
+
+    posts.forEach((post) => {
+      const postAcross = thinAlongX ? post.x : post.z;
+      const postAlong = thinAlongX ? post.z : post.x;
+      const gap = Math.abs(postAcross - across) - T / 2 - half;
+      if (Math.abs(gap) > FACE_TOLERANCE_MM) return;
+      if (Math.abs(postAlong - alongCenter) > alongHalf - T / 4) return;
+      const py0 = post.y - post.height / 2;
+      const py1 = post.y + post.height / 2;
+      if (py1 < y0 + 1 || py0 > y1 - 1) return;
+      const sign = across > postAcross ? 1 : -1;
+      const face = across + sign * half;
+      ys.forEach((y, k) => {
+        points.push({
+          id: `fastener-${board.id}-${post.id}-${k}`,
+          x: thinAlongX ? face : postAlong,
+          y,
+          z: thinAlongX ? postAlong : face,
+          normalX: thinAlongX ? sign : 0,
+          normalY: 0,
+          normalZ: thinAlongX ? 0 : sign,
+          type,
+          spec: FASTENERS_CONFIG.CLADDING_SCREW_SPEC
+        });
+      });
+    });
+  });
+
+  return dedupe(points);
+}
+
+function dedupe(points: FastenerPoint[]): FastenerPoint[] {
+  const seen = new Set<string>();
+  return points.filter((p) => {
+    const key = `${Math.round(p.x)}|${Math.round(p.y)}|${Math.round(p.z)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function buildFastenerPoints(
+  tubes: BoxElement[],
+  treads: BoxElement[],
+  risers: BoxElement[],
+  cladding: BoxElement[]
+): FastenerPoint[] {
+  return [
+    ...treadPoints(treads, tubes),
+    ...boardPoints(risers, tubes, 'riser'),
+    ...boardPoints(cladding, tubes, 'cladding')
+  ];
+}
+
+function summary(countRaw: number, spec: string, drillBitDiameterMm: number): FastenersItemSummary {
+  const countWithReserve = Math.ceil(countRaw * FASTENERS_CONFIG.HARDWARE_RESERVE_FACTOR);
   return {
     spec,
     countRaw,
     countWithReserve,
-    boxesCount,
+    boxesCount: Math.max(1, Math.ceil(countWithReserve / FASTENERS_CONFIG.BOX_PACKAGE_SIZE)),
     drillBitDiameterMm
   };
 }
 
-export function calculateFasteners(
-  stepCount: number,
-  postsAlongWidth: number,
-  hasRisers: boolean,
-  hasSideCladding: boolean,
-  sidePieces: SideCladdingPiece[]
-): FastenersCalculationResult {
-  const treadsCount = stepCount * postsAlongWidth * FASTENERS_CONFIG.SCREWS_PER_STRINGER_TREAD;
-  const risersCount = hasRisers
-    ? stepCount * postsAlongWidth * FASTENERS_CONFIG.SCREWS_PER_POST_RISER
-    : 0;
-
-  const sideScrewsPerSide = sidePieces.reduce((acc, piece) => {
-    return acc + (piece.postsCrossed * FASTENERS_CONFIG.SCREWS_PER_POST_CLADDING_TIER);
-  }, 0);
-  const sideCladdingCount = hasSideCladding ? sideScrewsPerSide * 2 : 0;
-
-  const treads = calculateItemSummary(
-    treadsCount,
-    FASTENERS_CONFIG.TREAD_SCREW_SPEC,
-    FASTENERS_CONFIG.TREAD_DRILL_BIT_MM
-  );
-
-  const risersAndCladdingTotal = risersCount + sideCladdingCount;
-  const risersAndCladding = calculateItemSummary(
-    risersAndCladdingTotal,
+export function summarizeFasteners(points: FastenerPoint[]): FastenersCalculationResult {
+  const count = (type: FastenerPointType): number => points.filter((p) => p.type === type).length;
+  const treadsCount = count('tread');
+  const risersCount = count('riser');
+  const sideCladdingCount = count('cladding');
+  const treads = summary(treadsCount, FASTENERS_CONFIG.TREAD_SCREW_SPEC, FASTENERS_CONFIG.TREAD_DRILL_BIT_MM);
+  const risersAndCladding = summary(
+    risersCount + sideCladdingCount,
     FASTENERS_CONFIG.CLADDING_SCREW_SPEC,
     FASTENERS_CONFIG.CLADDING_DRILL_BIT_MM
   );
-
   return {
     treads,
     risersAndCladding,
-    breakdown: {
-      treadsCount,
-      risersCount,
-      sideCladdingCount
-    },
+    breakdown: { treadsCount, risersCount, sideCladdingCount },
     totalScrewsWithReserve: treads.countWithReserve + risersAndCladding.countWithReserve
   };
-}
-
-function generateTreadFastenerPoints(
-  stepCount: number,
-  stepHeight: number,
-  spacing: TransverseSpacing
-): FastenerPoint[] {
-  const points: FastenerPoint[] = [];
-  const halfWidth = spacing.frameWidthMm / 2;
-
-  for (let i = 0; i < stepCount; i++) {
-    const stepLevel = i + 1;
-    const tierFromTop = stepCount - stepLevel;
-    const tierZStart = tierFromTop * STEP_FRAME_MODULE_DEPTH_MM;
-    const tierZEnd = (tierFromTop + 1) * STEP_FRAME_MODULE_DEPTH_MM;
-    const rearZ = tierZStart + (PROFILE_TUBE_SIZE_MM / 2);
-    const frontZ = tierZEnd - (PROFILE_TUBE_SIZE_MM / 2);
-    const topY = stepLevel * stepHeight;
-
-    spacing.postXOffsets.forEach((xOff: number, pIdx: number) => {
-      const postX = -halfWidth + xOff + (PROFILE_TUBE_SIZE_MM / 2);
-
-      points.push({
-        id: `fastener-tread-${stepLevel}-p${pIdx + 1}-rear`,
-        x: postX,
-        y: topY,
-        z: rearZ,
-        normalX: 0,
-        normalY: 1,
-        normalZ: 0,
-        type: 'tread',
-        spec: FASTENERS_CONFIG.TREAD_SCREW_SPEC
-      });
-
-      points.push({
-        id: `fastener-tread-${stepLevel}-p${pIdx + 1}-front`,
-        x: postX,
-        y: topY,
-        z: frontZ,
-        normalX: 0,
-        normalY: 1,
-        normalZ: 0,
-        type: 'tread',
-        spec: FASTENERS_CONFIG.TREAD_SCREW_SPEC
-      });
-    });
-  }
-
-  return points;
-}
-
-function generateRiserFastenerPoints(
-  stepCount: number,
-  stepHeight: number,
-  spacing: TransverseSpacing,
-  metrics: StepNodeMetrics
-): FastenerPoint[] {
-  const points: FastenerPoint[] = [];
-  const halfWidth = spacing.frameWidthMm / 2;
-  const riserHeight = calculateVisibleRiserHeight(stepHeight, STEP_TREAD_THICKNESS_MM);
-  const actualHeight = Math.max(0, riserHeight - RISER_TOP_CLEARANCE_MM);
-
-  for (let i = 0; i < stepCount; i++) {
-    const stepLevel = i + 1;
-    const tierFromTop = (stepCount - 1) - i;
-    const zFrontFace = (tierFromTop + 1) * metrics.tierStepRunMm + RISER_THICKNESS_MM;
-    const yBase = i * stepHeight;
-    const yLow = yBase + (actualHeight * RELATIVE_FASTENER_LOW_RATIO);
-    const yHigh = yBase + (actualHeight * RELATIVE_FASTENER_HIGH_RATIO);
-
-    spacing.postXOffsets.forEach((xOff: number, pIdx: number) => {
-      const postX = -halfWidth + xOff + (PROFILE_TUBE_SIZE_MM / 2);
-
-      points.push({
-        id: `fastener-riser-${stepLevel}-p${pIdx + 1}-low`,
-        x: postX,
-        y: yLow,
-        z: zFrontFace,
-        normalX: 0,
-        normalY: 0,
-        normalZ: 1,
-        type: 'riser',
-        spec: FASTENERS_CONFIG.CLADDING_SCREW_SPEC
-      });
-
-      points.push({
-        id: `fastener-riser-${stepLevel}-p${pIdx + 1}-high`,
-        x: postX,
-        y: yHigh,
-        z: zFrontFace,
-        normalX: 0,
-        normalY: 0,
-        normalZ: 1,
-        type: 'riser',
-        spec: FASTENERS_CONFIG.CLADDING_SCREW_SPEC
-      });
-    });
-  }
-
-  return points;
-}
-
-function generateCladdingFastenerPoints(
-  stepCount: number,
-  totalWidth: number,
-  metrics: StepNodeMetrics,
-  sidePieces: SideCladdingPiece[]
-): FastenerPoint[] {
-  const points: FastenerPoint[] = [];
-  const sideHalfWidth = totalWidth / 2;
-
-  const rowZCenters: number[] = [PROFILE_TUBE_SIZE_MM / 2];
-  for (let r = 1; r <= stepCount; r++) {
-    rowZCenters.push((r * metrics.tierStepRunMm) - (PROFILE_TUBE_SIZE_MM / 2));
-  }
-
-  const sides: Array<{ sign: 1 | -1; name: string }> = [
-    { sign: -1, name: 'left' },
-    { sign: 1, name: 'right' }
-  ];
-
-  let currentY = 0;
-  sidePieces.forEach((piece: SideCladdingPiece) => {
-    const yLow = currentY + (piece.heightMm * RELATIVE_FASTENER_LOW_RATIO);
-    const yHigh = currentY + (piece.heightMm * RELATIVE_FASTENER_HIGH_RATIO);
-
-    sides.forEach((side) => {
-      const xPos = side.sign * sideHalfWidth;
-
-      for (let postIdx = 0; postIdx < piece.postsCrossed; postIdx++) {
-        const zPos = rowZCenters[postIdx] ?? 0;
-
-        points.push({
-          id: `fastener-cladding-${side.name}-t${piece.tierIndex}-p${postIdx + 1}-low`,
-          x: xPos,
-          y: yLow,
-          z: zPos,
-          normalX: side.sign,
-          normalY: 0,
-          normalZ: 0,
-          type: 'cladding',
-          spec: FASTENERS_CONFIG.CLADDING_SCREW_SPEC
-        });
-
-        points.push({
-          id: `fastener-cladding-${side.name}-t${piece.tierIndex}-p${postIdx + 1}-high`,
-          x: xPos,
-          y: yHigh,
-          z: zPos,
-          normalX: side.sign,
-          normalY: 0,
-          normalZ: 0,
-          type: 'cladding',
-          spec: FASTENERS_CONFIG.CLADDING_SCREW_SPEC
-        });
-      }
-    });
-
-    currentY += piece.heightMm;
-  });
-
-  return points;
-}
-
-export function calculateFastenerPoints(payload: FastenerPointsPayload): FastenerPoint[] {
-  const treadPoints = generateTreadFastenerPoints(
-    payload.stepCount,
-    payload.stepHeight,
-    payload.spacing
-  );
-
-  const riserPoints = payload.hasRisers
-    ? generateRiserFastenerPoints(
-      payload.stepCount,
-      payload.stepHeight,
-      payload.spacing,
-      payload.metrics
-    )
-    : [];
-
-  const claddingPoints = payload.hasSideCladding
-    ? generateCladdingFastenerPoints(
-      payload.stepCount,
-      payload.totalWidth,
-      payload.metrics,
-      payload.sidePieces
-    )
-    : [];
-
-  return [...treadPoints, ...riserPoints, ...claddingPoints];
 }

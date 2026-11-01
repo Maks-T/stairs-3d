@@ -1,0 +1,134 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "sq-40x40x2",
+      "name": "Труба 40×40×2",
+      "sizeMm": 40,
+      "wallMm": 2,
+      "massKgPerM": 2.39,
+      "stockLengthMm": 6000,
+      "pricePerStock": 1380,
+      "limits": {
+        "maxWidthMm": 2000,
+        "maxHeightMm": 1000
+      }
+    },
+    {
+      "id": "sq-60x60x3",
+      "name": "Труба 60×60×3",
+      "sizeMm": 60,
+      "wallMm": 3,
+      "massKgPerM": 5.37,
+      "stockLengthMm": 6000,
+      "pricePerStock": 3100,
+      "limits": {
+        "maxWidthMm": 3000,
+        "maxHeightMm": 1500
+      }
+    },
+    {
+      "id": "sq-80x80x3",
+      "name": "Труба 80×80×3",
+      "sizeMm": 80,
+      "wallMm": 3,
+      "massKgPerM": 7.25,
+      "stockLengthMm": 6000,
+      "pricePerStock": 4200,
+      "limits": {
+        "maxWidthMm": 3000,
+        "maxHeightMm": 1500
+      }
+    }
+  ],
+  "treads": [
+    {
+      "id": "cm-305",
+      "name": "ДПК CM 305 (Oliver Deck)",
+      "thicknessMm": 25,
+      "depthMm": 305,
+      "stockLengthsMm": [
+        3000
+      ],
+      "pricePerMeter": 802.33,
+      "maxJoistPitchMm": 400
+    },
+    {
+      "id": "terrapol-24x320",
+      "name": "ДПК Terrapol 24×320 (Oliver Deck)",
+      "thicknessMm": 24,
+      "depthMm": 320,
+      "stockLengthsMm": [
+        2000,
+        3000
+      ],
+      "pricePerMeter": 1990,
+      "maxJoistPitchMm": 400
+    }
+  ],
+  "claddings": [
+    {
+      "id": "mpk-11x145",
+      "name": "МПК 11×145",
+      "thicknessMm": 11,
+      "widthMm": 145,
+      "stockLengthsMm": [
+        3000
+      ],
+      "pricePerMeter": 383.33
+    },
+    {
+      "id": "oliverdeck-standart-12x140",
+      "name": "Oliverdeck Standart 12×140",
+      "thicknessMm": 12,
+      "widthMm": 140,
+      "stockLengthsMm": [
+        3000,
+        4000
+      ],
+      "pricePerMeter": 490
+    },
+    {
+      "id": "cm-10x150",
+      "name": "Заборная CM 10×150",
+      "thicknessMm": 10,
+      "widthMm": 150,
+      "stockLengthsMm": [
+        3000
+      ],
+      "pricePerMeter": 640
+    },
+    {
+      "id": "oliverdeck-premium-12x140",
+      "name": "Oliverdeck Premium 12×140",
+      "thicknessMm": 12,
+      "widthMm": 140,
+      "stockLengthsMm": [
+        3000,
+        4000
+      ],
+      "pricePerMeter": 415
+    },
+    {
+      "id": "polivan-denpasar-11x140",
+      "name": "Polivan Denpasar 11×140",
+      "thicknessMm": 11,
+      "widthMm": 140,
+      "stockLengthsMm": [
+        2900
+      ],
+      "pricePerMeter": 552
+    },
+    {
+      "id": "woodvex-10x130",
+      "name": "Woodvex 10×130",
+      "thicknessMm": 10,
+      "widthMm": 130,
+      "stockLengthsMm": [
+        3000,
+        4000
+      ],
+      "pricePerMeter": 470
+    }
+  ]
+}

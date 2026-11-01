@@ -1,7 +1,8 @@
+
 import { Estimate } from 'estimate';
 import type { StairLayoutResult } from '@/types/stairs';
-import type { CuttingOptimizationResult } from '@/services/cutting-service';
-import type { CladdingEstimate } from '@/core/cladding-calculator';
+import type { BoardCuttingResult, CuttingOptimizationResult } from '@/services/cutting-service';
+import { getActiveCladding, getActiveProfile, getActiveTread } from '@/catalog/stairs-catalog';
 
 export interface FlatEstimateRow {
   id: string;
@@ -16,8 +17,15 @@ export interface FlatEstimateRow {
 export function buildStairsEstimate(
   layout: StairLayoutResult,
   cuttingResult: CuttingOptimizationResult,
-  claddingResult: CladdingEstimate
+  boardCutting: BoardCuttingResult
 ): { root: Estimate; rows: FlatEstimateRow[]; grandTotal: number } {
+  const profile = getActiveProfile();
+  const tread = getActiveTread();
+  const cladding = getActiveCladding();
+  const treadBoards = boardCutting.treads;
+  const claddingBoards = boardCutting.cladding?.boardsCount ?? 0;
+  const claddingStock = boardCutting.cladding?.stockLengthMm ?? cladding.stockLengthsMm[0] ?? 3000;
+
   const root = new Estimate({
     id: 'stair_root',
     name: 'Лестница приставная Oliver Deck',
@@ -33,19 +41,19 @@ export function buildStairsEstimate(
 
   deckGroup.add({
     id: 'item_treads',
-    name: 'Ступень из ДПК CM 305 (25×305 мм)',
+    name: `${tread.name}, ${tread.thicknessMm}×${tread.depthMm} мм (доска ${treadBoards.stockLengthMm / 1000} м)`,
     unit: 'шт',
-    count: layout.stepCount,
-    value: 2407
+    count: treadBoards.boardsCount,
+    value: Math.round((tread.pricePerMeter * treadBoards.stockLengthMm) / 1000)
   });
 
-  if (claddingResult.totalCladdingBoards > 0) {
+  if (claddingBoards > 0) {
     deckGroup.add({
       id: 'item_cladding',
-      name: 'Заборная доска МПК 11×145 мм (хлыст 3м)',
+      name: `Заборная доска ${cladding.name} мм (доска ${claddingStock / 1000} м)`,
       unit: 'шт',
-      count: claddingResult.totalCladdingBoards,
-      value: 1150
+      count: claddingBoards,
+      value: Math.round((cladding.pricePerMeter * claddingStock) / 1000)
     });
   }
 
@@ -57,10 +65,10 @@ export function buildStairsEstimate(
 
   frameGroup.add({
     id: 'item_pipes',
-    name: 'Профильная труба 40×40×2 мм (хлыст 6м)',
+    name: `Профильная ${profile.name.toLowerCase()} мм (хлыст ${profile.stockLengthMm / 1000} м)`,
     unit: 'шт',
     count: cuttingResult.pipeStocksCount,
-    value: 1380
+    value: profile.pricePerStock
   });
 
   const hardwareGroup = root.add({
@@ -123,3 +131,5 @@ export function buildStairsEstimate(
 
   return { root, rows, grandTotal };
 }
+
+

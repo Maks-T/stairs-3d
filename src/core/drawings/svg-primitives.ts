@@ -1,23 +1,28 @@
 import type { DimensionLineOptions } from '@/types/drawings';
+import { DRAW } from './drawing-style';
 
 export function createSvgHeader(width: number, height: number, viewBox: string): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${viewBox}" style="display:block;width:100%;height:100%;">`;
+  // Размер задаётся атрибутами в «миллиметрах чертежа»: масштаб и скроллинг управляются просмотрщиком
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${viewBox}" style="display:block;">`;
 }
 
 export function createSvgDefs(): string {
   return `
     <defs>
       <pattern id="board-hatch" width="8" height="8" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
-        <line x1="0" y1="0" x2="0" y2="8" stroke="#94a3b8" stroke-width="1.0" />
+        <line x1="0" y1="0" x2="0" y2="8" stroke="${DRAW.hatch}" stroke-width="1.0" />
+      </pattern>
+      <pattern id="steel-hatch" width="5" height="5" patternTransform="rotate(-45 0 0)" patternUnits="userSpaceOnUse">
+        <line x1="0" y1="0" x2="0" y2="5" stroke="${DRAW.lineThin}" stroke-width="0.8" />
       </pattern>
       <pattern id="cladding-hatch" width="12" height="12" patternTransform="rotate(-45 0 0)" patternUnits="userSpaceOnUse">
-        <line x1="0" y1="0" x2="0" y2="12" stroke="#e2e8f0" stroke-width="1" />
+        <line x1="0" y1="0" x2="0" y2="12" stroke="${DRAW.cladding}" stroke-width="1" />
       </pattern>
       <marker id="arrow-start" markerWidth="8" markerHeight="6" refX="0" refY="3" orient="auto">
-        <polygon points="8 0.5, 0 3, 8 5.5" fill="#0284c7" />
+        <polygon points="8 0.5, 0 3, 8 5.5" fill="${DRAW.dim}" />
       </marker>
       <marker id="arrow-end" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-        <polygon points="0 0.5, 8 3, 0 5.5" fill="#0284c7" />
+        <polygon points="0 0.5, 8 3, 0 5.5" fill="${DRAW.dim}" />
       </marker>
     </defs>
   `;
@@ -28,11 +33,23 @@ export function renderRect(
   y: number,
   width: number,
   height: number,
-  fill = '#ffffff',
-  stroke = '#1e293b',
-  strokeWidth = 1.5
+  fill: string = DRAW.fill,
+  stroke: string = DRAW.line,
+  strokeWidth: number = DRAW.strokeBeam,
+  extra = ''
 ): string {
-  return `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" />`;
+  return `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" ${extra}/>`;
+}
+
+export function renderPolygon(
+  points: Array<[number, number]>,
+  fill: string = DRAW.fill,
+  stroke: string = DRAW.line,
+  strokeWidth: number = DRAW.strokeBeam,
+  extra = ''
+): string {
+  const pts = points.map(([x, y]) => `${Number(x.toFixed(2))},${Number(y.toFixed(2))}`).join(' ');
+  return `<polygon points="${pts}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="miter" ${extra} />`;
 }
 
 export function renderLine(
@@ -40,29 +57,50 @@ export function renderLine(
   y1: number,
   x2: number,
   y2: number,
-  stroke = '#64748b',
-  strokeWidth = 1,
+  stroke: string = DRAW.ground,
+  strokeWidth: number = DRAW.strokeThin,
   dashArray?: string
 ): string {
   const dash = dashArray ? `stroke-dasharray="${dashArray}"` : '';
   return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${strokeWidth}" ${dash} />`;
 }
 
+export function renderText(
+  x: number,
+  y: number,
+  text: string,
+  opts: {
+    size?: number;
+    anchor?: 'start' | 'middle' | 'end';
+    fill?: string;
+    weight?: number | string;
+    mono?: boolean;
+  } = {}
+): string {
+  const { size = DRAW.noteSize, anchor = 'start', fill = DRAW.line, weight = 600, mono = false } = opts;
+  const family = mono ? DRAW.fontMono : DRAW.fontSans;
+  return `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="${size}" font-weight="${weight}" fill="${fill}" font-family="${family}">${text}</text>`;
+}
+
 export function renderDimensionLine(opts: DimensionLineOptions): string {
   const {
     x1, y1, x2, y2, text, offset = 0, orientation = 'horizontal', textSide = 'start'
   } = opts;
+  const txt = (x: number, y: number, anchor: string): string =>
+    `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="${DRAW.dimSize}" font-weight="600" fill="${DRAW.dimText}" font-family="${DRAW.fontMono}">${text}</text>`;
+  const ext = `stroke="${DRAW.dimExt}" stroke-width="${DRAW.strokeExt}"`;
+  const dimLine = `stroke="${DRAW.dim}" stroke-width="${DRAW.strokeDim}" marker-start="url(#arrow-start)" marker-end="url(#arrow-end)"`;
 
   if (orientation === 'horizontal') {
     const lineY = y1 + offset;
-    const textY = textSide === 'start' ? lineY - 5 : lineY + 14;
+    const textY = textSide === 'start' ? lineY - 5 : lineY + 15;
     const textX = (x1 + x2) / 2;
     return `
       <g class="dim-line">
-        <line x1="${x1}" y1="${y1}" x2="${x1}" y2="${lineY + (offset > 0 ? 5 : -5)}" stroke="#94a3b8" stroke-width="0.8" />
-        <line x1="${x2}" y1="${y2}" x2="${x2}" y2="${lineY + (offset > 0 ? 5 : -5)}" stroke="#94a3b8" stroke-width="0.8" />
-        <line x1="${x1}" y1="${lineY}" x2="${x2}" y2="${lineY}" stroke="#0284c7" stroke-width="1.2" marker-start="url(#arrow-start)" marker-end="url(#arrow-end)" />
-        <text x="${textX}" y="${textY}" text-anchor="middle" font-size="11" font-weight="600" fill="#0369a1" font-family="monospace">${text}</text>
+        <line x1="${x1}" y1="${y1}" x2="${x1}" y2="${lineY + (offset > 0 ? 5 : -5)}" ${ext} />
+        <line x1="${x2}" y1="${y2}" x2="${x2}" y2="${lineY + (offset > 0 ? 5 : -5)}" ${ext} />
+        <line x1="${x1}" y1="${lineY}" x2="${x2}" y2="${lineY}" ${dimLine} />
+        ${txt(textX, textY, 'middle')}
       </g>
     `;
   }
@@ -73,10 +111,10 @@ export function renderDimensionLine(opts: DimensionLineOptions): string {
   const anchor = textSide === 'start' ? 'end' : 'start';
   return `
     <g class="dim-line">
-      <line x1="${x1}" y1="${y1}" x2="${lineX + (offset > 0 ? 5 : -5)}" y2="${y1}" stroke="#94a3b8" stroke-width="0.8" />
-      <line x1="${x2}" y1="${y2}" x2="${lineX + (offset > 0 ? 5 : -5)}" y2="${y2}" stroke="#94a3b8" stroke-width="0.8" />
-      <line x1="${lineX}" y1="${y1}" x2="${lineX}" y2="${y2}" stroke="#0284c7" stroke-width="1.2" marker-start="url(#arrow-start)" marker-end="url(#arrow-end)" />
-      <text x="${textX}" y="${textY}" text-anchor="${anchor}" font-size="11" font-weight="600" fill="#0369a1" font-family="monospace">${text}</text>
+      <line x1="${x1}" y1="${y1}" x2="${lineX + (offset > 0 ? 5 : -5)}" y2="${y1}" ${ext} />
+      <line x1="${x2}" y1="${y2}" x2="${lineX + (offset > 0 ? 5 : -5)}" y2="${y2}" ${ext} />
+      <line x1="${lineX}" y1="${y1}" x2="${lineX}" y2="${y2}" ${dimLine} />
+      ${txt(textX, textY, anchor)}
     </g>
   `;
 }
@@ -90,11 +128,11 @@ export function renderDimensionLine(opts: DimensionLineOptions): string {
 export function renderLevelMark(x: number, y: number, label: string, elevationVal: string, symbolX: number): string {
   return `
     <g class="level-mark">
-      <line x1="${x}" y1="${y}" x2="${symbolX}" y2="${y}" stroke="#0284c7" stroke-width="0.8" stroke-dasharray="10 3 2 3" />
-      <polygon points="${symbolX - 5},${y - 8} ${symbolX + 5},${y - 8} ${symbolX},${y}" fill="#0284c7" />
-      <line x1="${symbolX - 5}" y1="${y - 8}" x2="${symbolX + 62}" y2="${y - 8}" stroke="#0284c7" stroke-width="1.2" />
-      <text x="${symbolX + 7}" y="${y - 11}" font-size="10" font-weight="700" fill="#dc2626" font-family="monospace">${elevationVal}</text>
-      <text x="${symbolX + 7}" y="${y + 14}" font-size="10" font-weight="600" fill="#0369a1" font-family="sans-serif">${label}</text>
+      <line x1="${x}" y1="${y}" x2="${symbolX}" y2="${y}" stroke="${DRAW.dim}" stroke-width="${DRAW.strokeExt}" stroke-dasharray="10 3 2 3" />
+      <polygon points="${symbolX - 5},${y - 8} ${symbolX + 5},${y - 8} ${symbolX},${y}" fill="${DRAW.dim}" />
+      <line x1="${symbolX - 5}" y1="${y - 8}" x2="${symbolX + 62}" y2="${y - 8}" stroke="${DRAW.dim}" stroke-width="${DRAW.strokeDim}" />
+      <text x="${symbolX + 7}" y="${y - 11}" font-size="${DRAW.noteSize}" font-weight="700" fill="${DRAW.levelValue}" font-family="${DRAW.fontMono}">${elevationVal}</text>
+      <text x="${symbolX + 7}" y="${y + 15}" font-size="${DRAW.noteSize}" font-weight="600" fill="${DRAW.dimText}" font-family="${DRAW.fontSans}">${label}</text>
     </g>
   `;
 }
@@ -105,15 +143,15 @@ export function renderLevelMark(x: number, y: number, label: string, elevationVa
  */
 export function renderLevelAxis(axisX: number, baseY: number, stepCount: number, stepHeight: number): string {
   const parts: string[] = [
-    `<line x1="${axisX}" y1="${baseY}" x2="${axisX}" y2="${baseY - stepCount * stepHeight}" stroke="#0284c7" stroke-width="0.8" stroke-dasharray="10 3 2 3" />`
+    `<line x1="${axisX}" y1="${baseY}" x2="${axisX}" y2="${baseY - stepCount * stepHeight}" stroke="${DRAW.dim}" stroke-width="${DRAW.strokeExt}" stroke-dasharray="10 3 2 3" />`
   ];
   for (let i = 0; i < stepCount; i++) {
     const yLow = baseY - i * stepHeight;
     const yHigh = baseY - (i + 1) * stepHeight;
     const yMid = (yLow + yHigh) / 2;
     parts.push(
-      `<line x1="${axisX}" y1="${yLow}" x2="${axisX}" y2="${yHigh}" stroke="#0284c7" stroke-width="1.2" marker-start="url(#arrow-start)" marker-end="url(#arrow-end)" />`,
-      `<text transform="translate(${axisX - 5} ${yMid}) rotate(-90)" text-anchor="middle" font-size="11" font-weight="600" fill="#0369a1" font-family="monospace">${Math.round(stepHeight)}</text>`
+      `<line x1="${axisX}" y1="${yLow}" x2="${axisX}" y2="${yHigh}" stroke="${DRAW.dim}" stroke-width="${DRAW.strokeDim}" marker-start="url(#arrow-start)" marker-end="url(#arrow-end)" />`,
+      `<text transform="translate(${axisX - 5} ${yMid}) rotate(-90)" text-anchor="middle" font-size="${DRAW.dimSize}" font-weight="600" fill="${DRAW.dimText}" font-family="${DRAW.fontMono}">${Math.round(stepHeight)}</text>`
     );
   }
   return `<g class="level-axis">${parts.join('')}</g>`;
@@ -169,23 +207,14 @@ export function renderSectionCutMark(opts: SectionCutMarkOptions): string {
 
   return `
     <g class="section-cut">
-      <line x1="${barStart.x}" y1="${barStart.y}" x2="${barEnd.x}" y2="${barEnd.y}" stroke="#0f172a" stroke-width="3" />
-      <line x1="${tail.x}" y1="${tail.y}" x2="${headBase.x}" y2="${headBase.y}" stroke="#0f172a" stroke-width="1.4" />
-      <polygon points="${head}" fill="#0f172a" />
-      <text x="${labelX}" y="${labelY}" font-size="13" font-weight="800" fill="#0f172a" text-anchor="middle" font-family="sans-serif">${label}</text>
+      <line x1="${barStart.x}" y1="${barStart.y}" x2="${barEnd.x}" y2="${barEnd.y}" stroke="${DRAW.line}" stroke-width="3" />
+      <line x1="${tail.x}" y1="${tail.y}" x2="${headBase.x}" y2="${headBase.y}" stroke="${DRAW.line}" stroke-width="1.4" />
+      <polygon points="${head}" fill="${DRAW.line}" />
+      <text x="${labelX}" y="${labelY}" font-size="${DRAW.subtitleSize}" font-weight="800" fill="${DRAW.line}" text-anchor="middle" font-family="${DRAW.fontSans}">${label}</text>
     </g>
   `;
 }
 
-export function renderNodeCircle(cx: number, cy: number, r: number, label: string): string {
-  return `
-    <g class="node-callout">
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#0284c7" stroke-width="1.2" stroke-dasharray="4 2" />
-      <text x="${cx}" y="${cy - r - 4}" font-size="11" font-weight="700" fill="#0284c7" text-anchor="middle" font-family="sans-serif">Узел ${label}</text>
-    </g>
-  `;
-}
-
-export function renderTitle(x: number, y: number, text: string, anchor: 'start' | 'middle' | 'end' = 'start'): string {
-  return `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="14" font-weight="700" fill="#0f172a" font-family="sans-serif">${text}</text>`;
+export function renderTitle(x: number, y: number, text: string, anchor: 'start' | 'middle' | 'end' = 'middle'): string {
+  return `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="${DRAW.titleSize}" font-weight="700" fill="${DRAW.line}" font-family="${DRAW.fontSans}">${text}</text>`;
 }
