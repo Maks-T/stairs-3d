@@ -10,3 +10,6 @@
 [submodule "packages/estimate"]
 	path = packages/estimate
 	url = https://github.com/kapitulin24/Estimate
+[submodule "packages/cad-blueprint"]
+	path = packages/cad-blueprint
+	url = https://github.com/Maks-T/cad-blueprint
