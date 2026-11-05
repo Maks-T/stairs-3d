@@ -411,59 +411,30 @@ html, body {
 .cad-drawing-viewport {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  display: flex;
-  padding: 24px;
+  position: relative;
+  overflow: hidden;
   background-color: #ffffff;
   background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
   background-size: 20px 20px;
-  cursor: grab;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: #94a3b8 #f1f5f9;
 }
 
-.cad-drawing-viewport.panning {
-  cursor: grabbing;
-  user-select: none;
-}
-
-/* margin:auto центрирует чертёж, пока он меньше окна, и не обрезает его слева/сверху при прокрутке */
-.cad-drawing-canvas {
-  margin: auto;
-  flex-shrink: 0;
-}
-
-.cad-drawing-viewport svg {
+/* CadViewer (cad-blueprint/viewer): панорама и зум через viewBox, без прокрутки */
+.cad-drawing-viewport .cad-viewer svg {
   display: block;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-  border: 1px solid #cbd5e1;
-  border-radius: 4px;
-  background-color: #ffffff;
   max-width: none;
 }
 
-.cad-drawing-viewport::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
+/* «лист бумаги» под чертежом */
+.cad-drawing-viewport .cad-paper {
+  stroke: #cbd5e1;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.06));
 }
 
-.cad-drawing-viewport::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-
-.cad-drawing-viewport::-webkit-scrollbar-thumb {
-  background: #94a3b8;
-  border-radius: 6px;
-  border: 2px solid #f1f5f9;
-}
-
-.cad-drawing-viewport::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
-}
-
-.cad-drawing-viewport::-webkit-scrollbar-corner {
-  background: #f1f5f9;
+.cad-export-group .cad-zoom-btn {
+  min-width: 44px;
 }
 
 /* =====================================================================
@@ -887,26 +858,10 @@ button, input, select {
 .cad-drawing-viewport {
   background-color: #fafafa;
   background-image: radial-gradient(#e4e4e7 1px, transparent 1px);
-  scrollbar-color: #a1a1aa transparent;
 }
 
-.cad-drawing-viewport::-webkit-scrollbar-track,
-.cad-drawing-viewport::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-.cad-drawing-viewport::-webkit-scrollbar-thumb {
-  background: #d4d4d8;
-  border: 3px solid #fafafa;
-}
-
-.cad-drawing-viewport::-webkit-scrollbar-thumb:hover {
-  background: #a1a1aa;
-}
-
-.cad-drawing-viewport svg {
-  border-color: var(--border);
-  border-radius: var(--radius);
+.cad-drawing-viewport .cad-paper {
+  stroke: var(--border);
 }
 
 #cad-viewport-container {

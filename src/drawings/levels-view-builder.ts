@@ -1,31 +1,11 @@
-import { DRAW } from './drawing-style';
+import { boundsOf, CORNER, isBaseRail, isPost, tierOfBeam, tubeOutline, uniqueSorted, type BoxElement, type Pt, type StairLayoutResult } from '@calculation/stairs';
+import { dimLinear, polygon, viewport, type Entity } from 'cad-blueprint';
+import { DRAW, PAPER } from './drawing-style';
+import { planPoint } from './plan-geometry';
 import { getLevelSectionName } from './section-labels';
-import {
-  boundsOf,
-  CORNER,
-  isBaseRail,
-  isPost,
-  tierOfBeam,
-  tubeOutline,
-  uniqueSorted,
-  type BoxElement,
-  type Pt,
-  type StairLayoutResult
-} from '@calculation/stairs';
-import {
-  createSvgDefs,
-  createSvgHeader,
-  renderDimensionLine,
-  renderPolygon,
-  renderText,
-  renderTitle
-} from './svg-primitives';
+import { L, type StairDrawing } from './stair-theme';
 
-const MARGIN = { top: 70, right: 150, bottom: 40, left: 160 };
-const BLOCK_HEAD = 70;
-const BLOCK_FOOT = 110;
-
-const near = (a: number, b: number): boolean => Math.abs(a - b) < 1;
+const near = (p: number, q: number): boolean => Math.abs(p - q) < 1;
 
 interface LevelBlock {
   tier: number;
@@ -42,122 +22,94 @@ function buildBlocks(layout: StairLayoutResult): LevelBlock[] {
   const byTier = new Map<number, BoxElement[]>();
   beams.forEach((t) => {
     const tier = tierOfBeam(t, layout.module, layout.stepHeight);
-    const list = byTier.get(tier) ?? [];
-    list.push(t);
-    byTier.set(tier, list);
+    byTier.set(tier, [...(byTier.get(tier) ?? []), t]);
   });
-
   return [...byTier.keys()]
-    .sort((a, c) => a - c)
+    .sort((p, q) => p - q)
     .map((tier) => {
       const tubes = byTier.get(tier) ?? [];
       const pts: Pt[] = [];
       tubes.forEach((t) => pts.push(...tubeOutline(t)));
-      const bb = boundsOf(pts);
-      return { tier, tubes, ...bb, hasDiagonals: tubes.some((t) => !!t.polygonXZ) };
+      return { tier, tubes, ...boundsOf(pts), hasDiagonals: tubes.some((t) => !!t.polygonXZ) };
     });
 }
 
-export function generateLevelsViewSvg(layout: StairLayoutResult): string {
+/** Каркас одного яруса в координатах плана (Y = −z): балки и размеры. */
+function levelEntities(d: StairDrawing, layout: StairLayoutResult, bl: LevelBlock): Entity[] {
   const T = layout.module.tube;
-  const blocks = buildBlocks(layout);
-  const gMinX = Math.min(...blocks.map((bl) => bl.minX));
-  const gMaxX = Math.max(...blocks.map((bl) => bl.maxX));
-  const ox = MARGIN.left - gMinX;
+  const a = (mm: number): number => d.a(mm);
+  const out: Entity[] = bl.tubes.map((t) => polygon(tubeOutline(t).map(planPoint), { layer: L.outline, fill: DRAW.fill }));
 
-  const blockHeights = blocks.map((bl) => bl.maxZ - bl.minZ + BLOCK_HEAD + BLOCK_FOOT);
-  const svgW = gMaxX - gMinX + MARGIN.left + MARGIN.right;
-  const svgH = MARGIN.top + blockHeights.reduce((a, c) => a + c, 0) + MARGIN.bottom;
+  out.push(
+    dimLinear([bl.minX, -bl.minZ], [bl.maxX, -bl.minZ], { offset: a(PAPER.dimFirst), layer: L.dimensions }),
+    dimLinear([bl.minX, -bl.minZ], [bl.minX, -bl.maxZ], { direction: 'vertical', offset: a(PAPER.dimFirst + PAPER.dimStep + 4), layer: L.dimensions })
+  );
 
-  const svg: string[] = [
-    createSvgHeader(svgW, svgH, `0 0 ${svgW} ${svgH}`),
-    createSvgDefs(),
-    renderTitle(svgW / 2, DRAW.titleY, 'Схема горизонтальных каркасов по уровням')
-  ];
+  // пролёты между поперечинами, снизу
+  const xs = uniqueSorted(bl.tubes.filter((t) => !t.polygonXZ && near(t.width, T) && t.depth >= 150).map((t) => t.x));
+  for (let i = 0; i < xs.length - 1; i++) {
+    const x1 = (xs[i] ?? 0) + T / 2;
+    const x2 = (xs[i + 1] ?? 0) - T / 2;
+    if (x2 - x1 < 15) continue;
+    out.push(dimLinear([x1, -bl.maxZ], [x2, -bl.maxZ], { offset: -a(PAPER.dimFirst), layer: L.dimensions }));
+  }
 
-  let cursorY = MARGIN.top;
-  blocks.forEach((bl, idx) => {
-    const top = cursorY + BLOCK_HEAD;
-    const oz = top - bl.minZ;
-    const px = (x: number): number => x + ox;
-    const pz = (z: number): number => z + oz;
-    const elevation = Math.round(bl.tier * layout.stepHeight);
-
-    svg.push(
-      renderText(px((bl.minX + bl.maxX) / 2), cursorY + 18, `Уровень ${bl.tier} (отм. +${elevation}), сечение ${getLevelSectionName(bl.tier)}`, {
-        size: DRAW.subtitleSize, anchor: 'middle', weight: 700
-      })
-    );
-
-    bl.tubes.forEach((tube) => {
-      const pts = tubeOutline(tube).map(([x, z]) => [px(x), pz(z)] as Pt);
-      svg.push(renderPolygon(pts, DRAW.fill, DRAW.line, DRAW.strokeBeam));
+  // пролёты на крыльях, по бокам
+  const centerX = (bl.minX + bl.maxX) / 2;
+  const xRun = bl.tubes.filter((t) => !t.polygonXZ && near(t.depth, T) && t.width > 150 && t.width < 300);
+  const innerBeams = bl.tubes.filter((t) => /-inner$/.test(t.id));
+  (['left', 'right'] as const).forEach((side) => {
+    const group = xRun.filter((t) => (side === 'left' ? t.x < centerX : t.x > centerX));
+    if (group.length === 0) return;
+    const inner = innerBeams.find((t) => (side === 'left' ? t.x < centerX : t.x > centerX));
+    const end = inner ? inner.z + inner.depth / 2 : undefined;
+    const low = uniqueSorted(group.map((t) => t.z + T / 2));
+    const high = uniqueSorted(group.map((t) => t.z - T / 2));
+    const baseX = side === 'right' ? bl.maxX : bl.minX;
+    const at = side === 'right' ? bl.maxX + a(PAPER.dimFirst) : bl.minX - a(PAPER.dimFirst);
+    low.forEach((z1, i) => {
+      const z2 = high[i + 1] ?? end;
+      if (z2 === undefined || z2 - z1 < 15) return;
+      out.push(dimLinear([baseX, -z1], [baseX, -z2], { direction: 'vertical', at: [at, 0], layer: L.dimensions }));
     });
-
-    svg.push(
-      renderDimensionLine({
-        x1: px(bl.minX), y1: pz(bl.minZ), x2: px(bl.maxX), y2: pz(bl.minZ),
-        text: String(Math.round(bl.maxX - bl.minX)), offset: -26, orientation: 'horizontal'
-      }),
-      renderDimensionLine({
-        x1: px(bl.minX), y1: pz(bl.minZ), x2: px(bl.minX), y2: pz(bl.maxZ),
-        text: String(Math.round(bl.maxZ - bl.minZ)), offset: -64, orientation: 'vertical', textSide: 'start'
-      })
-    );
-
-    // пролёты между поперечинами
-    const zRun = bl.tubes
-      .filter((t) => !t.polygonXZ && near(t.width, T) && t.depth >= 150)
-      .map((t) => t.x);
-    const xs = uniqueSorted(zRun);
-    for (let i = 0; i < xs.length - 1; i++) {
-      const a = (xs[i] ?? 0) + T / 2;
-      const c = (xs[i + 1] ?? 0) - T / 2;
-      if (c - a < 15) continue;
-      svg.push(renderDimensionLine({
-        x1: px(a), y1: pz(bl.maxZ), x2: px(c), y2: pz(bl.maxZ),
-        text: String(Math.round(c - a)), offset: 28, orientation: 'horizontal', textSide: 'end'
-      }));
-    }
-
-    // пролёты на крыльях
-    const centerX = (bl.minX + bl.maxX) / 2;
-    const xRun = bl.tubes.filter((t) => !t.polygonXZ && near(t.depth, T) && t.width > 150 && t.width < 300);
-    const innerBeams = bl.tubes.filter((t) => /-inner$/.test(t.id));
-    (['left', 'right'] as const).forEach((side) => {
-      const group = xRun.filter((t) => (side === 'left' ? t.x < centerX : t.x > centerX));
-      if (group.length === 0) return;
-      const inner = innerBeams.find((t) => (side === 'left' ? t.x < centerX : t.x > centerX));
-      const end = inner ? inner.z + inner.depth / 2 : undefined;
-      const lowFaces = uniqueSorted(group.map((t) => t.z + T / 2));
-      const highFaces = uniqueSorted(group.map((t) => t.z - T / 2));
-      const baseX = side === 'right' ? px(bl.maxX) : px(bl.minX);
-      const off = side === 'right' ? 30 : -30;
-      lowFaces.forEach((low, i) => {
-        const next = highFaces[i + 1] ?? end;
-        if (next === undefined || next - low < 15) return;
-        svg.push(renderDimensionLine({
-          x1: baseX, y1: pz(low), x2: baseX, y2: pz(next),
-          text: String(Math.round(next - low)), offset: off, orientation: 'vertical',
-          textSide: side === 'right' ? 'end' : 'start'
-        }));
-      });
-    });
-
-    if (bl.hasDiagonals) {
-      const diag = bl.tubes.find((t) => !!t.polygonXZ);
-      const len = diag ? diag.depth.toFixed(2) : '';
-      svg.push(renderText(
-        px(bl.minX),
-        pz(bl.maxZ) + 78,
-        `Диагонали 45° парами: отступ от вершины ${CORNER.DIAGONAL_OFFSET_MM} мм, зазор между ними ${(CORNER.DIAGONAL_OFFSET_MM * Math.SQRT2).toFixed(2)} мм, длина по оси ${len} мм`,
-        { size: DRAW.noteSize, fill: DRAW.dimText }
-      ));
-    }
-
-    cursorY += blockHeights[idx] ?? 0;
   });
 
-  svg.push('</svg>');
-  return svg.join('\n');
+  if (bl.hasDiagonals) {
+    const diag = bl.tubes.find((t) => !!t.polygonXZ);
+    const len = diag ? diag.depth.toFixed(2) : '';
+    out.push(
+      d.note(
+        [bl.minX, -bl.maxZ - a(PAPER.dimFirst + 8)],
+        `Диагонали 45° парами: отступ от вершины ${CORNER.DIAGONAL_OFFSET_MM} мм, зазор между ними ${(CORNER.DIAGONAL_OFFSET_MM * Math.SQRT2).toFixed(2)} мм, длина по оси ${len} мм`,
+        { anchor: 'top-left', color: DRAW.dimText }
+      )
+    );
+  }
+  return out;
+}
+
+/**
+ * Схема горизонтальных каркасов по уровням: каждый ярус — отдельный видовой экран со своей подписью,
+ * экраны стоят столбиком сверху вниз (уровень 1 сверху).
+ */
+export function buildLevelsView(d: StairDrawing, layout: StairLayoutResult): Entity[] {
+  const blocks = buildBlocks(layout);
+  const a = (mm: number): number => d.a(mm);
+  const out: Entity[] = [];
+  let top = 0;
+  for (const bl of blocks) {
+    const elevation = Math.round(bl.tier * layout.stepHeight);
+    out.push(
+      viewport(levelEntities(d, layout, bl), {
+        id: `level-${bl.tier}`,
+        // верх яруса (стена, z = minZ) ставится на текущую строку листа
+        target: [0, -bl.minZ],
+        position: [0, top],
+        title: `Уровень ${bl.tier} (отм. +${elevation}), сечение ${getLevelSectionName(bl.tier)}`,
+        layer: L.notes
+      })
+    );
+    top -= bl.maxZ - bl.minZ + a(PAPER.dimFirst + 2 * PAPER.dimStep + (bl.hasDiagonals ? 14 : 4) + PAPER.title + 8);
+  }
+  return d.withTitle(out, 'Схема горизонтальных каркасов по уровням');
 }

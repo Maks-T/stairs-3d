@@ -1,96 +1,48 @@
-import {
-  boundsOf,
-  CORNER,
-  FASTENERS,
-  isBaseRail,
-  isPost,
-  treadOutline,
-  tubeOutline,
-  type Pt,
-  type StairLayoutResult
-} from '@calculation/stairs';
-import { DRAW } from './drawing-style';
-import { createSvgDefs, createSvgHeader, renderDimensionLine, renderPolygon, renderText, renderTitle } from './svg-primitives';
+import { CORNER, FASTENERS, isBaseRail, isPost, treadOutline, tubeOutline, type Pt, type StairLayoutResult } from '@calculation/stairs';
+import type { Entity } from 'cad-blueprint';
+import { DRAW, PAPER } from './drawing-style';
+import { planBounds, planFaintBeams, planOverallDims, planTreads } from './plan-geometry';
+import type { StairDrawing } from './stair-theme';
 
-const MARGIN = { top: 110, right: 150, bottom: 150, left: 150 };
-const MARK_MM = 9;
-const MARK_COLOR = '#b91c1c';
-
-function plus(x: number, y: number): string {
-  return `<path d="M${x - MARK_MM} ${y}H${x + MARK_MM}M${x} ${y - MARK_MM}V${y + MARK_MM}" stroke="${MARK_COLOR}" stroke-width="2.2" />`;
-}
-
-function cross(x: number, y: number): string {
-  const d = MARK_MM * 0.75;
-  return `<path d="M${x - d} ${y - d}L${x + d} ${y + d}M${x - d} ${y + d}L${x + d} ${y - d}" stroke="${MARK_COLOR}" stroke-width="2.2" />`;
-}
-
-export function generateFastenersViewSvg(layout: StairLayoutResult): string {
+// Схема точек крепления ступеней (вид сверху).
+export function buildFastenersView(d: StairDrawing, layout: StairLayoutResult): Entity[] {
   const { frameTubes, treads, fastenerPoints, fasteners } = layout;
+  const a = (mm: number): number => d.a(mm);
   const beams = frameTubes.filter((t) => !isPost(t) && !isBaseRail(t));
 
-  const allPoints: Pt[] = [];
-  treads.forEach((t) => allPoints.push(...treadOutline(t)));
-  beams.forEach((t) => allPoints.push(...tubeOutline(t)));
-  const b = boundsOf(allPoints);
+  const all: Pt[] = [];
+  treads.forEach((t) => all.push(...treadOutline(t)));
+  beams.forEach((t) => all.push(...tubeOutline(t)));
+  const b = planBounds(all);
 
-  const planW = b.maxX - b.minX;
-  const planD = b.maxZ - b.minZ;
-  const svgW = planW + MARGIN.left + MARGIN.right;
-  const svgH = planD + MARGIN.top + MARGIN.bottom;
-  const px = (x: number): number => x + MARGIN.left - b.minX;
-  const pz = (z: number): number => z + MARGIN.top - b.minZ;
-
-  const svg: string[] = [
-    createSvgHeader(svgW, svgH, `0 0 ${svgW} ${svgH}`),
-    createSvgDefs(),
-    renderTitle(svgW / 2, DRAW.titleY, 'Схема точек крепления ступеней')
-  ];
-
-  [...treads]
-    .sort((a, c) => a.y - c.y)
-    .forEach((tread) => {
-      const pts = treadOutline(tread).map(([x, z]) => [px(x), pz(z)] as Pt);
-      svg.push(renderPolygon(pts, DRAW.treadFill, DRAW.treadStroke, DRAW.strokeThin));
-    });
-
-  svg.push(`<g opacity="${DRAW.beamFaintOpacity}">`);
-  beams.forEach((tube) => {
-    const pts = tubeOutline(tube).map(([x, z]) => [px(x), pz(z)] as Pt);
-    svg.push(renderPolygon(pts, 'none', DRAW.beamFaint, DRAW.strokeThin, 'stroke-dasharray="6 3"'));
-  });
-  svg.push('</g>');
-
-  const treadPoints = fastenerPoints.filter((p) => p.type === 'tread');
-  treadPoints.forEach((p) => svg.push(p.id.includes('-miter') ? cross(px(p.x), pz(p.z)) : plus(px(p.x), pz(p.z))));
-
-  svg.push(
-    renderDimensionLine({
-      x1: px(b.minX), y1: pz(b.minZ), x2: px(b.maxX), y2: pz(b.minZ),
-      text: String(Math.round(planW)), offset: -30, orientation: 'horizontal'
-    }),
-    renderDimensionLine({
-      x1: px(b.minX), y1: pz(b.minZ), x2: px(b.minX), y2: pz(b.maxZ),
-      text: String(Math.round(planD)), offset: -40, orientation: 'vertical', textSide: 'start'
-    })
-  );
+  const out: Entity[] = [...planTreads(layout), ...planFaintBeams(beams)];
+  for (const p of fastenerPoints.filter((f) => f.type === 'tread')) {
+    out.push(d.fastener(p.id.includes('-miter') ? 'cross' : 'plus', [p.x, -p.z]));
+  }
+  out.push(...planOverallDims(d, b));
 
   const { treadsCount, risersCount, sideCladdingCount } = fasteners.breakdown;
-  const legendY = svgH - 90;
-  svg.push(
-    plus(MARGIN.left + 7, legendY - 4),
-    renderText(MARGIN.left + 24, legendY, `Саморез ${FASTENERS.TREAD_SPEC}: ${FASTENERS.TREAD_FROM_NOSE_MM} мм от носика и ${FASTENERS.TREAD_FROM_BACK_MM} мм от заднего края ступени, на осях поперечин`, { size: DRAW.noteSize }),
-    cross(MARGIN.left + 7, legendY + 20),
-    renderText(MARGIN.left + 24, legendY + 24, `То же у торцовки 45°: ${CORNER.SCREW_MITER_OFFSET_MM} мм от линии шва`, { size: DRAW.noteSize }),
-    renderText(
-      MARGIN.left,
-      legendY + 52,
+  const x = b.minX;
+  let y = -b.maxZ - a(PAPER.dimFirst + 6);
+  const textX = x + a(6);
+  out.push(
+    d.fastener('plus', [x + a(2.5), y]),
+    d.note([textX, y], `Саморез ${FASTENERS.TREAD_SPEC}: ${FASTENERS.TREAD_FROM_NOSE_MM} мм от носика и ${FASTENERS.TREAD_FROM_BACK_MM} мм от заднего края ступени, на осях поперечин`, { anchor: 'middle-left' })
+  );
+  y -= a(7);
+  out.push(
+    d.fastener('cross', [x + a(2.5), y]),
+    d.note([textX, y], `То же у торцовки 45°: ${CORNER.SCREW_MITER_OFFSET_MM} мм от линии шва`, { anchor: 'middle-left' })
+  );
+  y -= a(8);
+  out.push(
+    d.note(
+      [x, y],
       `Ступени: ${treadsCount} шт. Подступенки: ${risersCount} шт., боковая зашивка: ${sideCladdingCount} шт. ` +
         `(${FASTENERS.BOARD_SPEC}, по 2 на стойку, ${FASTENERS.BOARD_EDGE_MM} мм от краёв доски)`,
-      { size: DRAW.noteSize, fill: DRAW.dimText }
+      { anchor: 'middle-left', color: DRAW.dimText }
     )
   );
 
-  svg.push('</svg>');
-  return svg.join('\n');
+  return d.withTitle(out, 'Схема точек крепления ступеней');
 }

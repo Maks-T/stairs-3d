@@ -1,263 +1,110 @@
-
 import { STEP_NODE, type StairLayoutResult } from '@calculation/stairs';
-import {
-  createSvgDefs,
-  createSvgHeader,
-  renderDimensionLine,
-  renderLevelAxis,
-  renderLevelMark,
-  renderLine,
-  renderPolygon,
-  renderRect,
-  renderSectionCutMark,
-  renderText,
-  renderTitle
-} from './svg-primitives';
-import { DRAW } from './drawing-style';
+import { dimChain, dimLinear, line, polygon, type Entity, type Point2 } from 'cad-blueprint';
+import { PAPER } from './drawing-style';
+import { L, type StairDrawing } from './stair-theme';
 import { getLevelSectionLetter } from './section-labels';
+import { levelAxis } from './level-axis';
 
-interface SideViewMargin {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-}
-
-const VIEW_MARGIN: SideViewMargin = {
-  top: 110,
-  right: 155,
-  bottom: 120,
-  left: 160
-};
-
-export function generateSideViewSvg(layout: StairLayoutResult): string {
+// Вид сбоку. Начало координат — передний нижний угол марша, X — вглубь, Y — вверх.
+export function buildSideView(d: StairDrawing, layout: StairLayoutResult): Entity[] {
   const { stepCount, stepHeight, totalDepth, totalHeight, risers, module: m } = layout;
-
-  const width = totalDepth + VIEW_MARGIN.left + VIEW_MARGIN.right;
-  const height = totalHeight + VIEW_MARGIN.top + VIEW_MARGIN.bottom;
-  const originX = VIEW_MARGIN.left;
-  const baseY = VIEW_MARGIN.top + totalHeight;
-  const topTreadY = baseY - totalHeight;
-
-  const svgParts: string[] = [
-    createSvgHeader(width, height, `0 0 ${width} ${height}`),
-    createSvgDefs(),
-    renderTitle(width / 2, DRAW.titleY, 'Вид сбоку'),
-    renderLine(originX - 40, baseY, originX + totalDepth + 40, baseY, DRAW.ground, DRAW.strokeBeam)
-  ];
-
+  const a = (mm: number): number => d.a(mm);
   const T = m.tube;
   const M = m.moduleDepth;
   const concrete = layout.supportMode === 'concrete';
   const beamBottom = (level: number): number => level * stepHeight - m.treadThickness - T;
-  const tierStartX = (level: number): number => originX + (stepCount - level) * M;
-  const post = (x: number, top: number, bottom: number): string =>
-    renderRect(x, baseY - top, T, top - bottom, DRAW.fill, DRAW.line, DRAW.strokeOutline);
+  const tierStartX = (level: number): number => (stepCount - level) * M;
+  const out: (Entity | null)[] = [line([-a(4), 0], [totalDepth + a(4), 0], { layer: L.ground })];
+  const post = (x: number, top: number, bottom: number): Entity | null => d.box(L.outline, x, bottom, T, top - bottom);
 
   if (concrete) {
     // бетон: как разрез Е-Е
-    const outline: Array<[number, number]> = [[originX, baseY]];
+    const outline: Point2[] = [[0, 0]];
     for (let level = stepCount; level >= 1; level--) {
       const x = tierStartX(level) + M - T;
-      outline.push([outline[outline.length - 1]?.[0] ?? originX, baseY - beamBottom(level)], [x, baseY - beamBottom(level)]);
+      outline.push([outline[outline.length - 1]?.[0] ?? 0, beamBottom(level)], [x, beamBottom(level)]);
     }
-    outline.push([tierStartX(1) + M - T, baseY]);
-    svgParts.push(renderPolygon(outline, DRAW.concrete, DRAW.line, DRAW.strokeThin));
-    svgParts.push(renderText(originX + (tierStartX(1) - originX) / 2 + M / 2, baseY - beamBottom(1) / 2 - 10, 'Бетон', { size: 14, anchor: 'middle', fill: DRAW.lineThin }));
-
+    outline.push([tierStartX(1) + M - T, 0]);
+    out.push(polygon(outline, { layer: L.concrete, fill: 'hatch' }));
+    out.push(d.note([tierStartX(1) / 2 + M / 2, beamBottom(1) / 2], 'Бетон', { height: 3.5, anchor: 'middle-center' }));
     for (let level = 1; level <= stepCount; level++) {
-      const x = tierStartX(level) + M - T;
-      svgParts.push(post(x, beamBottom(level), level === 1 ? T : beamBottom(level - 1)));
+      out.push(post(tierStartX(level) + M - T, beamBottom(level), level === 1 ? T : beamBottom(level - 1)));
     }
-    svgParts.push(renderRect(tierStartX(1) + M - T, baseY - T, T, T, 'url(#steel-hatch)', DRAW.line, DRAW.strokeOutline));
+    out.push(d.box(L.cutSteel, tierStartX(1) + M - T, 0, T, T, 'hatch'));
   } else {
     // стойки от земли
-    svgParts.push(post(originX, beamBottom(stepCount), 0));
-    for (let level = stepCount; level >= 1; level--) {
-      svgParts.push(post(tierStartX(level) + M - T, beamBottom(level), 0));
-    }
+    out.push(post(0, beamBottom(stepCount), 0));
+    for (let level = stepCount; level >= 1; level--) out.push(post(tierStartX(level) + M - T, beamBottom(level), 0));
   }
 
   // каркасы ярусов
   for (let level = 1; level <= stepCount; level++) {
     const x = tierStartX(level);
-    const y = baseY - beamBottom(level) - T;
-    svgParts.push(
-      renderRect(x, y, M, T, DRAW.fill, DRAW.line, DRAW.strokeOutline),
-      renderLine(x + T, y, x + T, y + T, DRAW.line, DRAW.strokeThin),
-      renderLine(x + M - T, y, x + M - T, y + T, DRAW.line, DRAW.strokeThin)
+    const y = beamBottom(level);
+    out.push(
+      d.box(L.outline, x, y, M, T),
+      line([x + T, y], [x + T, y + T], { layer: L.thin }),
+      line([x + M - T, y], [x + M - T, y + T], { layer: L.thin })
     );
   }
 
+  // ступени и их глубина
   for (let i = 0; i < stepCount; i++) {
-    const stepLvl = i + 1;
-    const tierFromTop = stepCount - stepLvl;
-    const treadY = baseY - (stepLvl * stepHeight);
-    const treadX = originX + (tierFromTop * m.moduleDepth);
-
-    svgParts.push(
-      renderRect(
-        treadX,
-        treadY,
-        m.treadDepth,
-        m.treadThickness,
-        'url(#board-hatch)',
-        DRAW.line,
-        DRAW.strokeBeam
-      )
-    );
-
-    svgParts.push(
-      renderDimensionLine({
-        x1: treadX,
-        y1: treadY,
-        x2: treadX + m.treadDepth,
-        y2: treadY,
-        text: String(m.treadDepth),
-        offset: -20,
-        orientation: 'horizontal'
-      })
-    );
+    const top = (i + 1) * stepHeight;
+    const x = (stepCount - 1 - i) * M;
+    out.push(d.box(L.cutBoard, x, top - m.treadThickness, m.treadDepth, m.treadThickness, 'hatch'));
+    out.push(dimLinear([x, top], [x + m.treadDepth, top], { layer: L.dimensions, offset: a(5) }));
   }
 
   if (risers.length > 0) {
+    const riserH = stepHeight - m.treadThickness - STEP_NODE.RISER_TOP_CLEARANCE_MM;
     for (let i = 0; i < stepCount; i++) {
-      const tierIndex = stepCount - 1 - i;
-      const riserX = originX + ((tierIndex + 1) * m.moduleDepth);
-      const riserH = (stepHeight - m.treadThickness) - STEP_NODE.RISER_TOP_CLEARANCE_MM;
-      const riserY = baseY - ((i + 1) * stepHeight) + m.treadThickness + STEP_NODE.RISER_TOP_CLEARANCE_MM;
-
-      svgParts.push(renderRect(riserX, riserY, m.boardThickness, riserH, DRAW.riser, DRAW.line, DRAW.strokeOutline));
+      const x = (stepCount - i) * M;
+      const top = (i + 1) * stepHeight - m.treadThickness - STEP_NODE.RISER_TOP_CLEARANCE_MM;
+      out.push(d.box(L.riser, x, top - riserH, m.boardThickness, riserH, '#cbd5e1'));
     }
   }
 
-  const levelAxisX = originX + totalDepth + 45;
-  const levelSymbolX = levelAxisX + 25;
-  svgParts.push(renderLevelAxis(levelAxisX, baseY, stepCount, stepHeight));
-  for (let i = 0; i <= stepCount; i++) {
-    const lvlY = baseY - (i * stepHeight);
-    const valStr = i === 0 ? '0.000' : `+${Math.round(i * stepHeight)}`;
-    const lineStartX = i === 0
-      ? originX + totalDepth + 5
-      : originX + ((stepCount - i) * m.moduleDepth) + m.treadDepth + 4;
-    svgParts.push(renderLevelMark(lineStartX, lvlY, `Уровень ${i}`, valStr, levelSymbolX));
-  }
+  // ось отметок справа
+  const axisX = totalDepth + a(16);
+  out.push(...levelAxis(d, axisX, stepCount, stepHeight, (i) => (i === 0 ? totalDepth + a(1) : (stepCount - i) * M + m.treadDepth + a(1))));
 
-  svgParts.push(
-    renderDimensionLine({
-      x1: originX,
-      y1: baseY,
-      x2: originX,
-      y2: baseY - totalHeight,
-      text: String(Math.round(totalHeight)),
-      offset: -75,
-      orientation: 'vertical',
-      textSide: 'start'
-    }),
-    renderDimensionLine({
-      x1: originX,
-      y1: topTreadY,
-      x2: originX,
-      y2: topTreadY + m.treadThickness,
-      text: String(m.treadThickness),
-      offset: -35,
-      orientation: 'vertical',
-      textSide: 'start'
-    }),
-    renderDimensionLine({
-      x1: originX,
-      y1: topTreadY + m.treadThickness,
-      x2: originX,
-      y2: topTreadY + stepHeight,
-      text: String(Math.round(stepHeight - m.treadThickness)),
-      offset: -35,
-      orientation: 'vertical',
-      textSide: 'start'
-    })
+  // высоты слева
+  const topY = totalHeight;
+  out.push(
+    dimLinear([0, 0], [0, topY], { direction: 'vertical', offset: a(24), layer: L.dimensions }),
+    dimChain([[0, topY - stepHeight], [0, topY - m.treadThickness], [0, topY]], { direction: 'vertical', offset: a(12), layer: L.dimensions })
   );
 
+  // глубины снизу
   for (let r = 0; r < stepCount; r++) {
-    const x1 = originX + (r * m.moduleDepth) + m.tube;
-    const x2 = x1 + m.clearSpan;
+    const x1 = r * M + T;
+    out.push(dimLinear([x1, 0], [x1 + m.clearSpan, 0], { offset: -a(PAPER.dimFirst), layer: L.dimensions }));
+  }
+  out.push(
+    dimLinear([0, 0], [M, 0], { offset: -a(PAPER.dimFirst + PAPER.dimStep), layer: L.dimensions }),
+    dimLinear([0, 0], [totalDepth, 0], { offset: -a(PAPER.dimFirst + 2 * PAPER.dimStep), layer: L.dimensions })
+  );
 
-    svgParts.push(
-      renderDimensionLine({
-        x1,
-        y1: baseY,
-        x2,
-        y2: baseY,
-        text: String(m.clearSpan),
-        offset: 35,
-        orientation: 'horizontal',
-        textSide: 'end'
-      })
-    );
+  // свес носика верхней ступени
+  const noseX = M + (risers.length > 0 ? m.boardThickness : 0);
+  if (m.treadDepth - noseX > 0.5) {
+    out.push(dimLinear([noseX, topY - m.treadThickness], [m.treadDepth, topY - m.treadThickness], { offset: -a(4), layer: L.dimensions }));
   }
 
-  svgParts.push(
-    renderDimensionLine({
-      x1: originX,
-      y1: baseY,
-      x2: originX + m.moduleDepth,
-      y2: baseY,
-      text: String(m.moduleDepth),
-      offset: 65,
-      orientation: 'horizontal',
-      textSide: 'end'
-    }),
-    renderDimensionLine({
-      x1: originX,
-      y1: baseY,
-      x2: originX + totalDepth,
-      y2: baseY,
-      text: String(Math.round(totalDepth)),
-      offset: 95,
-      orientation: 'horizontal',
-      textSide: 'end'
-    })
-  );
-
-  const topNoseX = originX + m.moduleDepth + (risers.length > 0 ? m.boardThickness : 0);
-  svgParts.push(
-    renderDimensionLine({
-      x1: topNoseX,
-      y1: topTreadY + m.treadThickness,
-      x2: originX + m.treadDepth,
-      y2: topTreadY + m.treadThickness,
-      text: String(STEP_NODE.NOSE_OVERHANG_MM),
-      offset: 16,
-      orientation: 'horizontal',
-      textSide: 'end'
-    })
-  );
-
-  svgParts.push(
-    renderSectionCutMark({ x: originX, y: topTreadY - 45, dir: 'right', label: 'А', barSide: -1 }),
-    renderSectionCutMark({ x: originX, y: baseY + 28, dir: 'right', label: 'А', barSide: 1 })
-  );
+  // разрез А-А
+  out.push(...d.sectionCut([0, topY + a(14)], 'right', 'А', -1), ...d.sectionCut([0, -a(9)], 'right', 'А', 1));
 
   // секущие плоскости ярусов и Б-Б
-  const beamMidY = (level: number): number =>
-    baseY - (level * stepHeight) + m.treadThickness + m.tube / 2;
-  const leftCutX = originX - 105;
-
-  const planCuts: Array<{ label: string; y: number; rightX: number }> = [];
+  const beamMid = (level: number): number => level * stepHeight - m.treadThickness - T / 2;
+  const leftX = -a(34);
+  const cuts: { label: string; y: number; rightX: number }[] = [];
   for (let level = stepCount; level >= 1; level--) {
-    planCuts.push({
-      label: getLevelSectionLetter(level),
-      y: beamMidY(level),
-      rightX: originX + ((stepCount - level) * m.moduleDepth) + m.treadDepth + 14
-    });
+    cuts.push({ label: getLevelSectionLetter(level), y: beamMid(level), rightX: (stepCount - level) * M + m.treadDepth + a(16) });
   }
-  planCuts.push({ label: 'Б', y: baseY - 30, rightX: originX + totalDepth + 12 });
+  cuts.push({ label: 'Б', y: Math.min(30, beamBottom(1) / 2), rightX: totalDepth + a(4) });
+  for (const c of cuts) out.push(...d.sectionCut([leftX, c.y], 'down', c.label, -1), ...d.sectionCut([c.rightX, c.y], 'down', c.label, 1));
 
-  planCuts.forEach(({ label, y, rightX }) => {
-    svgParts.push(renderSectionCutMark({ x: leftCutX, y, dir: 'down', label, barSide: -1 }));
-    svgParts.push(renderSectionCutMark({ x: rightX, y, dir: 'down', label, barSide: 1 }));
-  });
-
-  svgParts.push('</svg>');
-  return svgParts.join('\n');
+  return d.withTitle(out.filter((e): e is Entity => e !== null), 'Вид сбоку');
 }
-
 

@@ -25,7 +25,9 @@
     "paths": {
       "@/*": ["./src/*"],
       "@calculation/*": ["./calculation/*"],
-      "estimate": ["./packages/estimate/estimate.d.ts"]
+      "estimate": ["./packages/estimate/estimate.d.ts"],
+      "cad-blueprint": ["./packages/cad-blueprint/src/index.ts"],
+      "cad-blueprint/*": ["./packages/cad-blueprint/src/*/index.ts"]
     }
   },
   "include": ["src", "calculation"]

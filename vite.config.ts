@@ -23,6 +23,15 @@ export default defineConfig(({ mode }) => ({
     alias: [
       { find: '@calculation', replacement: CALCULATION_DIR },
       { find: '@', replacement: SRC_DIR },
+      // cad-blueprint: исходники пакета из workspace (exports указывают на src/*.ts)
+      {
+        find: /^cad-blueprint\/(svg|dxf|format|viewer|three)$/,
+        replacement: path.resolve(PACKAGES_DIR, 'cad-blueprint/src/$1/index.ts'),
+      },
+      {
+        find: /^cad-blueprint$/,
+        replacement: path.resolve(PACKAGES_DIR, 'cad-blueprint/src/index.ts'),
+      },
       {
         find: 'estimate',
         replacement: path.resolve(PACKAGES_DIR, 'estimate/src'),

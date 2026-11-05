@@ -11,6 +11,7 @@
     "deploy": "node config/deploy/deploy.js"
   },
   "dependencies": {
+    "cad-blueprint": "workspace:*",
     "dockview": "^8.6.1",
     "three": "^0.170.0"
   },
