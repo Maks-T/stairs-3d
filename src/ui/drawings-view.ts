@@ -5,6 +5,7 @@ import { DRAWING_VIEWS, buildStairDrawings } from '@/drawings/stair-drawings';
 import type { DrawingViewType } from '@/drawings/types';
 
 const BUTTON_ZOOM_STEP = 1.25;
+const WHEEL_ZOOM_STEP = 1.06;
 const FILE_PREFIX = 'stairs';
 
 /**
@@ -97,6 +98,7 @@ export class DrawingsView {
         background: 'transparent',
         paper: '#ffffff',
         fitMargin: 24,
+        wheelFactor: WHEEL_ZOOM_STEP,
         maxZoom: 40,
         fileName: this.fileName()
       });
